@@ -1,0 +1,10 @@
+{
+  "id": "facility-001",
+  "name": "Sunrise Assisted Living",
+  "type": "assisted_living",
+  "latitude": 32.750,
+  "longitude": -117.120,
+  "contact": "555-0101",
+  "mobility_support": "wheelchair_transport_needed",
+  "accessible": true
+}
