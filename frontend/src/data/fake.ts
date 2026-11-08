@@ -1,24 +1,31 @@
 // All fake. Map area: North Park / City Heights, San Diego. No real people, calls or fire.
-import facilitiesRaw from '../../../data/facilities?raw'
+import facilitiesRaw from '../../../data/facilities.json?raw'
 import type { Call, Facility, FireStage, Responder, Zone } from '@/types'
 
 export const MAP_CENTER: [number, number] = [32.7525, -117.1145]
 export const MAP_ZOOM = 15
 
-// Team's shared fake facilities (data/facilities). Accepts one object or an array.
+// Team's shared fake facilities (data/facilities.json). Accepts one object or an array.
+// Entries with latitude/longitude (or lat/lng) are drawn on the map; the rest only appear in Contacts.
 function loadTeamFacilities(): Facility[] {
   try {
     const parsed = JSON.parse(facilitiesRaw)
     const list = Array.isArray(parsed) ? parsed : [parsed]
-    return list.map((f) => ({
-      id: f.id,
-      name: f.name,
-      type: f.type,
-      position: [f.latitude, f.longitude],
-      contact: f.contact,
-      mobilitySupport: f.mobility_support,
-      accessible: f.accessible,
-    }))
+    return list.map((f) => {
+      const lat = f.latitude ?? f.lat
+      const lng = f.longitude ?? f.lng
+      const support = Array.isArray(f.mobility_support) ? f.mobility_support.join(', ') : f.mobility_support
+      return {
+        id: f.id,
+        name: f.name,
+        type: f.type ?? 'facility',
+        position: typeof lat === 'number' && typeof lng === 'number' ? [lat, lng] : undefined,
+        area: f.area,
+        contact: f.contact ?? '',
+        mobilitySupport: support || undefined,
+        accessible: f.accessible,
+      }
+    })
   } catch {
     return []
   }

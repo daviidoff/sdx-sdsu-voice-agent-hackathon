@@ -113,7 +113,7 @@ export default function App() {
     }
     const stop = feed.start(onEvent)
     const site = facilities.find((f) => f.id === initialMission.facilityId)
-    if (site) void dispatchCrew(initialMission.crewId, { kind: 'facility', id: site.id, label: initialMission.label, position: site.position })
+    if (site?.position) void dispatchCrew(initialMission.crewId, { kind: 'facility', id: site.id, label: initialMission.label, position: site.position })
     return () => {
       stop()
       timers.current.forEach(clearTimeout)

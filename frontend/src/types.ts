@@ -31,7 +31,9 @@ export interface Facility {
   id: string
   name: string
   type: string
-  position: LatLng
+  /** Missing when the team data has no coordinates yet: listed in Contacts, not drawn on the map. */
+  position?: LatLng
+  area?: string
   contact: string
   mobilitySupport?: string
   accessible?: boolean

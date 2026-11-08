@@ -132,11 +132,11 @@ export function CallList({
           <div className="flex flex-col gap-2 p-3">
             <p className="text-xs text-muted-foreground">From the information search agent (opt-in registry and public directories). Fake data.</p>
             {facilities.map((f) => {
-              const zone = zoneFor(f.position, zones)
+              const zone = f.position && zoneFor(f.position, zones)
               return (
                 <div key={f.id} className="rounded-lg border bg-card p-3">
                   <div className="text-sm font-medium">{f.name}</div>
-                  <div className="text-xs text-muted-foreground">{f.type.replaceAll('_', ' ')}{f.mobilitySupport ? ` · ${f.mobilitySupport.replaceAll('_', ' ')}` : ''}</div>
+                  <div className="text-xs text-muted-foreground">{f.type.replaceAll('_', ' ')}{f.area ? ` · ${f.area}` : ''}{f.mobilitySupport ? ` · ${f.mobilitySupport.replaceAll('_', ' ')}` : ''}</div>
                   <div className="mt-1.5 flex items-center gap-1.5 text-xs">
                     <Phone className="size-3" /> {f.contact}
                     {zone && <Badge variant="secondary" className="ml-auto">Zone {zone.id}</Badge>}

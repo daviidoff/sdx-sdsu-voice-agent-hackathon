@@ -167,7 +167,7 @@ export function DisasterMap({
             </Polygon>
           )
         })}
-        {facilities.map((f) => (
+        {facilities.map((f) => f.position && (
           <Marker key={f.id} position={f.position} icon={facilityIcon(f)}>
             <Tooltip direction="top" offset={[0, -10]}>
               <div className="font-medium">{f.name}</div>
