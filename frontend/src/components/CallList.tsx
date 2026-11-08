@@ -3,15 +3,15 @@ import { Accessibility, Phone } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { facilities } from '@/data/fake'
 import { activeDispatch, etaMin } from '@/lib/dispatch'
 import { byPriority, elapsed, zoneFor } from '@/lib/geo'
 import { cn } from '@/lib/utils'
-import type { Call, Dispatch, Responder, Selection, TranscriptLine, Zone } from '@/types'
+import type { Call, Dispatch, Facility, Responder, Selection, TranscriptLine, Zone } from '@/types'
 import { CREW_KIND, CREW_STATUS, SITUATION, STATUS } from './labels'
 
 export function CallList({
   calls,
+  facilities,
   lines,
   zones,
   responders,
@@ -21,6 +21,7 @@ export function CallList({
   now,
 }: {
   calls: Call[]
+  facilities: Facility[]
   lines: Record<string, TranscriptLine[]>
   zones: Zone[]
   responders: Responder[]
@@ -42,7 +43,7 @@ export function CallList({
     <Tabs value={tab} onValueChange={setTab} className="flex h-full min-h-0 flex-col gap-0">
       <div className="border-b px-3 py-2">
         <TabsList className="w-full">
-          <TabsTrigger value="calls">Calls ({calls.filter((c) => c.status !== 'resolved').length})</TabsTrigger>
+          <TabsTrigger value="calls">Calls ({calls.filter((c) => c.status !== 'resolved' && c.status !== 'ended').length})</TabsTrigger>
           <TabsTrigger value="crews">Crews ({busy}/{responders.length})</TabsTrigger>
           <TabsTrigger value="contacts">Contacts</TabsTrigger>
         </TabsList>
@@ -50,6 +51,7 @@ export function CallList({
       <TabsContent value="calls" className="min-h-0 flex-1">
         <ScrollArea className="h-full">
           <div className="flex flex-col gap-2 p-3">
+            {!sorted.length && <p className="p-3 text-sm text-muted-foreground">No calls yet. Open the voice caller to begin.</p>}
             {sorted.map((c) => {
               const last = lines[c.id]?.findLast((l) => l.speaker === 'caller' || l.speaker === 'agent')
               const zone = zoneFor(c.position, zones)
@@ -67,7 +69,7 @@ export function CallList({
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="truncate text-sm font-medium">{c.callerName}</div>
-                      <div className="truncate text-xs text-muted-foreground">{c.address} · {c.people} {c.people === 1 ? 'person' : 'people'}</div>
+                      <div className="truncate text-xs text-muted-foreground">{c.address} · {c.people ?? 'Unknown'} {c.people === 1 ? 'person' : 'people'}</div>
                     </div>
                     <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">{elapsed(c.startedAt, now)}</span>
                   </div>
@@ -92,7 +94,7 @@ export function CallList({
       <TabsContent value="crews" className="min-h-0 flex-1">
         <ScrollArea className="h-full">
           <div className="flex flex-col gap-2 p-3">
-            <p className="text-xs text-muted-foreground">Click a crew to call it and send it to a caller. Fake crews.</p>
+            <p className="text-xs text-muted-foreground">No live crew or dispatch service is connected. Assistance remains unconfirmed.</p>
             {responders.map((r) => {
               const d = activeDispatch(dispatches, r.id)
               return (
@@ -130,12 +132,12 @@ export function CallList({
       <TabsContent value="contacts" className="min-h-0 flex-1">
         <ScrollArea className="h-full">
           <div className="flex flex-col gap-2 p-3">
-            <p className="text-xs text-muted-foreground">From the information search agent (opt-in registry and public directories). Fake data.</p>
+            <p className="text-xs text-muted-foreground">Shared team records. Availability and contact details require confirmation.</p>
             {facilities.map((f) => {
               const zone = f.position && zoneFor(f.position, zones)
               return (
                 <div key={f.id} className="rounded-lg border bg-card p-3">
-                  <div className="text-sm font-medium">{f.name}</div>
+                  <div className="text-sm font-medium">{f.name} {f.simulated && <Badge variant="outline">Demonstration record</Badge>}</div>
                   <div className="text-xs text-muted-foreground">{f.type.replaceAll('_', ' ')}{f.area ? ` · ${f.area}` : ''}{f.mobilitySupport ? ` · ${f.mobilitySupport.replaceAll('_', ' ')}` : ''}</div>
                   <div className="mt-1.5 flex items-center gap-1.5 text-xs">
                     <Phone className="size-3" /> {f.contact}

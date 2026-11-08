@@ -1,0 +1,31 @@
+{
+  "incident_id": "osm-discovery-demo",
+  "locations": [
+    "Central San Diego, California, USA"
+  ],
+  "categories": [
+    "care_home",
+    "disability_support",
+    "health_clinic",
+    "shelter",
+    "accessible_transport",
+    "community_organization"
+  ],
+  "country_code": "US",
+  "sources": [
+    "osm"
+  ],
+  "bounds": [
+    -117.18,
+    32.69,
+    -117.1,
+    32.77
+  ],
+  "max_tasks": 6,
+  "max_results_per_task": 50,
+  "max_leads": 200,
+  "concurrency": 3,
+  "task_timeout_seconds": 40,
+  "enrich_websites": true,
+  "max_websites": 10
+}

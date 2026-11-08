@@ -1,38 +1,18 @@
-# Emergency OS — Call dashboard
+# Connected operator dashboard
 
-Live call list, OpenStreetMap disaster map, live transcripts, and agent steering. React + Vite + Tailwind + shadcn/ui + Leaflet.
+Run `./scripts/run-demo.sh` from the repository root and open
+[the dashboard](http://127.0.0.1:8000/dashboard/). Use **Open voice caller** to start an ElevenLabs
+browser session against the same backend. For frontend development, `npm ci && npm run dev` serves
+`http://127.0.0.1:5174/dashboard/` and proxies `/api` to port 8000; open the phone separately on port 8000.
 
-## Run
+Calls, transcripts, confirmed facts, and background results come from the durable voice API. The feed
+refreshes every second and shows connection errors without silently switching to a fake feed.
+Operator messages are queued by the backend and delivered by the active phone window. Published
+area instructions are versioned and persisted. See `../docs/demo-api.md` for the contract.
 
-```bash
-npm install
-npm run dev        # http://localhost:5173
-```
+Facilities, incidents, and candidate routes come from the team's shared `data/` records. Existing
+records are labeled demonstrations. Unknown caller coordinates remain absent from the map.
+There is no connected crew dispatch service. `src/data/fake.ts` remains historical demo source and is
+not imported by the live dashboard.
 
-With no Supabase settings it plays a scripted demo with **fake data** (press **Replay** to restart).
-
-## Connect Supabase
-
-Create `frontend/.env.local` (never commit it):
-
-```
-VITE_SUPABASE_URL=https://<project>.supabase.co
-VITE_SUPABASE_ANON_KEY=<publishable/anon key>
-```
-
-Tables the dashboard reads (enable Realtime on `calls` and `transcript_lines`):
-
-| Table | Columns |
-|---|---|
-| `calls` | `id text pk, caller_name, phone, address, lat float8, lng float8, people int, situation ('can_leave'\|'needs_help'\|'trapped'), mobility, status ('active'\|'instructed'\|'help_assigned'\|'resolved'), started_at timestamptz` |
-| `transcript_lines` | `id text pk, call_id text, speaker ('caller'\|'agent'\|'system'), text, created_at timestamptz` |
-| `steering` (dashboard writes) | `id bigint generated, call_id text, text, mode ('context'\|'say'), created_at timestamptz default now()` |
-
-The voice agent side should listen for new `steering` rows for its call: `mode = 'context'` → `conversation.sendContextualUpdate(text)`, `mode = 'say'` → `conversation.sendUserMessage(text)`.
-
-## Where things are
-
-- `src/data/fake.ts` — fake calls, transcript script, fire stages, zones, responders, extra facilities. Also loads the team's `../data/facilities`.
-- `src/lib/feed.ts` — data source: fake replay or Supabase (same event shapes).
-- `src/lib/geo.ts` — which zone a caller is in (code decides the instruction), call priority.
-- `src/components/` — `CallList`, `DisasterMap`, `CallDetail`.
+Validation: `npm run build`, `npm run lint`, and the root Python dashboard integration tests.

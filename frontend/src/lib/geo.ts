@@ -12,13 +12,14 @@ export function pointInPolygon([lat, lng]: LatLng, polygon: LatLng[]): boolean {
 }
 
 // Code decides which marked area a caller is in. Evacuation zones win over warnings.
-export function zoneFor(position: LatLng, zones: Zone[]): Zone | undefined {
+export function zoneFor(position: LatLng | undefined, zones: Zone[]): Zone | undefined {
+  if (!position) return undefined
   const hits = zones.filter((z) => pointInPolygon(position, z.polygon))
   return hits.find((z) => z.level === 'evacuate') ?? hits[0]
 }
 
-const SITUATION_RANK: Record<Call['situation'], number> = { trapped: 0, needs_help: 1, can_leave: 2 }
-const STATUS_RANK: Record<Call['status'], number> = { active: 0, help_assigned: 1, instructed: 2, resolved: 3 }
+const SITUATION_RANK: Record<Call['situation'], number> = { trapped: 0, needs_help: 1, can_leave: 2, unknown: 3 }
+const STATUS_RANK: Record<Call['status'], number> = { active: 0, help_assigned: 1, instructed: 2, resolved: 3, ended: 4 }
 
 export function byPriority(a: Call, b: Call): number {
   const resolved = Number(a.status === 'resolved') - Number(b.status === 'resolved')

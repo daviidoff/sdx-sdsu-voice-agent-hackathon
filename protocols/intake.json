@@ -1,0 +1,8 @@
+{
+  "id": "intake",
+  "version": "2026-11-08.1",
+  "title": "Confirm current circumstances",
+  "tags": ["intake", "location", "household"],
+  "questions": ["Where are you now?", "How many people are with you, including yourself?", "Can everyone leave independently?"],
+  "rules": ["Use current confirmed location, not a registered address.", "Only relay current operator-approved instructions supplied by the dashboard.", "An absent evacuation order does not mean stay home or safe."]
+}

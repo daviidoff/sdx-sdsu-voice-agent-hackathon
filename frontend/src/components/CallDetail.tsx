@@ -13,7 +13,7 @@ import { SITUATION, STATUS } from './labels'
 const QUICK_STEERS = [
   'Ask them to stay on the line while we find a crew.',
   'Ask if there are pets or medical equipment.',
-  'Repeat the route slowly.',
+  'Ask them to confirm their current location.',
 ]
 
 export function CallDetail({
@@ -33,11 +33,12 @@ export function CallDetail({
   responders: Responder[]
   dispatches: Dispatch[]
   now: number
-  onSteer: (text: string, mode: 'context' | 'say') => void
+  onSteer: (text: string, mode: 'context' | 'say') => Promise<void>
   onDispatch: (crewId: string) => void
   onSelectCrew: (id: string) => void
 }) {
   const [draft, setDraft] = useState('')
+  const [sending, setSending] = useState(false)
   const scroller = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const el = scroller.current
@@ -46,10 +47,13 @@ export function CallDetail({
 
   if (!call) return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Select a call</div>
   const zone = zoneFor(call.position, zones)
-  const send = (mode: 'context' | 'say', text = draft) => {
-    if (!text.trim()) return
-    onSteer(text.trim(), mode)
-    setDraft('')
+  const ended = call.status === 'ended' || call.status === 'resolved'
+  const send = async (mode: 'context' | 'say', text = draft) => {
+    if (!text.trim() || ended || sending) return
+    setSending(true)
+    try { await onSteer(text.trim(), mode); setDraft('') }
+    catch { /* Parent displays the backend error; keep the draft for retry. */ }
+    finally { setSending(false) }
   }
 
   return (
@@ -72,12 +76,13 @@ export function CallDetail({
         <div className="grid gap-1 text-xs text-muted-foreground">
           <span className="flex items-center gap-1.5"><MapPin className="size-3.5" />{call.address}</span>
           <span className="flex items-center gap-1.5"><Phone className="size-3.5" />{call.phone}</span>
-          <span className="flex items-center gap-1.5"><Users className="size-3.5" />{call.people} · {call.mobility}</span>
+          <span className="flex items-center gap-1.5"><Users className="size-3.5" />{call.people ?? 'Unknown'} people · {call.mobility}</span>
         </div>
         <div className={cn('rounded-md border p-2.5 text-xs', zone?.level === 'evacuate' ? 'border-red-200 bg-red-50 text-red-900' : zone ? 'border-amber-200 bg-amber-50 text-amber-900' : 'bg-muted')}>
-          <div className="font-medium">{zone ? zone.label : 'Outside marked areas'}</div>
-          <div className="mt-0.5">{zone ? zone.instruction : 'No area instruction. Agent uses default guidance.'}</div>
+          <div className="font-medium">{call.instruction?.zone_id ? `Published instruction · v${call.instruction.version ?? '—'}` : zone ? zone.label : 'No matched instruction'}</div>
+          <div className="mt-0.5">{call.instruction?.text ?? zone?.instruction ?? 'Confirm the current location and request operator guidance.'}</div>
         </div>
+        <div className="text-xs text-muted-foreground">{call.scenarioId === 'dashboard' ? 'Shared dashboard context' : 'Demonstration scenario'} · {call.position ? 'Location mapped' : 'No confirmed map coordinates'}{call.wheelchairUsers !== undefined ? ` · ${call.wheelchairUsers} wheelchair users` : ''}</div>
         <Rescue call={call} responders={responders} dispatches={dispatches} now={now} onDispatch={onDispatch} onSelectCrew={onSelectCrew} />
       </div>
       <Separator />
@@ -94,18 +99,18 @@ export function CallDetail({
         <div className="text-xs font-medium text-muted-foreground">Steer the agent</div>
         <div className="flex flex-wrap gap-1.5">
           {QUICK_STEERS.map((q) => (
-            <button key={q} onClick={() => send('context', q)} className="rounded-full border px-2.5 py-1 text-left text-xs hover:bg-muted">
+            <button key={q} disabled={ended || sending} onClick={() => send('context', q)} className="rounded-full border px-2.5 py-1 text-left text-xs hover:bg-muted">
               {q}
             </button>
           ))}
         </div>
-        <Input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send('context')} placeholder="Instruction for the agent…" disabled={call.status === 'resolved'} />
+        <Input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send('context')} placeholder="Instruction for the agent…" disabled={ended || sending} />
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" className="flex-1" onClick={() => send('context')} disabled={!draft.trim()}>
+          <Button size="sm" variant="outline" className="flex-1" onClick={() => send('context')} disabled={!draft.trim() || ended || sending}>
             <Send /> Inform agent
           </Button>
-          <Button size="sm" className="flex-1" onClick={() => send('say')} disabled={!draft.trim()}>
-            <Volume2 /> Say now
+          <Button size="sm" className="flex-1" onClick={() => send('say')} disabled={!draft.trim() || ended || sending}>
+            <Volume2 /> Request spoken update
           </Button>
         </div>
       </div>

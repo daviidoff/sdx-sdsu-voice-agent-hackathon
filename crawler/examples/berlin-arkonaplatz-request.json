@@ -1,0 +1,31 @@
+{
+  "incident_id": "berlin-arkonaplatz-discovery-test",
+  "locations": [
+    "Arkonaplatz, Berlin, Germany"
+  ],
+  "categories": [
+    "care_home",
+    "disability_support",
+    "health_clinic",
+    "shelter",
+    "accessible_transport",
+    "community_organization"
+  ],
+  "country_code": "DE",
+  "sources": [
+    "osm"
+  ],
+  "bounds": [
+    13.3909,
+    52.53045,
+    13.4131,
+    52.54393
+  ],
+  "max_tasks": 6,
+  "max_results_per_task": 100,
+  "max_leads": 300,
+  "concurrency": 3,
+  "task_timeout_seconds": 40,
+  "enrich_websites": true,
+  "max_websites": 10
+}

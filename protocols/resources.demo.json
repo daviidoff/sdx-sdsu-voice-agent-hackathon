@@ -1,0 +1,9 @@
+{
+  "source": "synthetic-demo-fixture",
+  "version": "2026-11-08.1",
+  "vehicles": [
+    {"id": "demo-van-a", "passenger_capacity": 4, "wheelchair_capacity": 0},
+    {"id": "demo-accessible-van", "passenger_capacity": 5, "wheelchair_capacity": 2},
+    {"id": "demo-minibus", "passenger_capacity": 8, "wheelchair_capacity": 0}
+  ]
+}

@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import L from 'leaflet'
 import { CircleMarker, MapContainer, Marker, Polygon, Polyline, Rectangle, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import { PencilRuler, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { fireStages, facilities, MAP_CENTER, MAP_ZOOM } from '@/data/fake'
+const MAP_CENTER: [number, number] = [32.7525, -117.1145]
+const MAP_ZOOM = 12
 import { activeDispatch, crewPosition, etaMin } from '@/lib/dispatch'
 import type { Call, Dispatch, Facility, LatLng, Responder, Selection, Zone } from '@/types'
 import { SITUATION } from './labels'
@@ -105,6 +106,7 @@ function DrawRect({ active, onDone }: { active: boolean; onDone: (sw: LatLng, ne
 
 export function DisasterMap({
   calls,
+  facilities,
   zones,
   responders,
   dispatches,
@@ -116,6 +118,7 @@ export function DisasterMap({
   onZoneDrawn,
 }: {
   calls: Call[]
+  facilities: Facility[]
   zones: Zone[]
   responders: Responder[]
   dispatches: Dispatch[]
@@ -129,9 +132,6 @@ export function DisasterMap({
   const selectedCall = selection?.kind === 'call' ? calls.find((c) => c.id === selection.id) : undefined
   const selectedCrew = selection?.kind === 'crew' ? responders.find((r) => r.id === selection.id) : undefined
   const flyTarget = selectedCall?.position ?? (selectedCrew ? crewPosition(selectedCrew, dispatches, now) : undefined)
-  // Only fly when the selection changes, not every time a crew moves.
-  const flyRef = useRef<{ id?: string; pos?: LatLng }>({})
-  if (flyRef.current.id !== selection?.id) flyRef.current = { id: selection?.id, pos: flyTarget }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onDrawingChange(false)
@@ -143,17 +143,9 @@ export function DisasterMap({
     <div className="relative h-full w-full">
       <MapContainer center={MAP_CENTER} zoom={MAP_ZOOM} className="h-full w-full" zoomControl={false}>
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors · Routes: OSRM'
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        {fireStages.map((f, i) => (
-          <Polygon
-            key={f.label}
-            positions={f.polygon}
-            interactive={false}
-            pathOptions={{ color: '#ea580c', weight: i === fireStages.length - 1 ? 2 : 1, dashArray: i === fireStages.length - 1 ? undefined : '3 5', fillColor: '#f97316', fillOpacity: [0.12, 0.22, 0.5][i] ?? 0.3 }}
-          />
-        ))}
         {zones.map((z) => {
           const selected = selection?.kind === 'zone' && selection.id === z.id
           return (
@@ -180,12 +172,12 @@ export function DisasterMap({
           .map((d) => (
             <Polyline key={d.id} positions={d.route} pathOptions={{ color: '#2563eb', weight: 5, opacity: d.status === 'calling' ? 0.35 : 0.8, dashArray: d.status === 'calling' ? '4 8' : undefined }} />
           ))}
-        {calls.map((c) => {
+        {calls.filter((c) => c.position).map((c) => {
           const selected = selection?.kind === 'call' && selection.id === c.id
           return (
             <CircleMarker
               key={c.id}
-              center={c.position}
+              center={c.position!}
               radius={selected ? 13 : 9}
               eventHandlers={{ click: () => onSelect({ kind: 'call', id: c.id }) }}
               pathOptions={{ color: selected ? '#0f172a' : '#fff', weight: selected ? 3 : 2, fillColor: c.status === 'resolved' ? '#94a3b8' : SITUATION[c.situation].color, fillOpacity: 0.95 }}
@@ -209,7 +201,7 @@ export function DisasterMap({
         })}
         <DrawRect active={drawing} onDone={onZoneDrawn} />
         <KeepSized />
-        <FlyTo target={flyRef.current.pos} />
+        <FlyTo target={flyTarget} />
       </MapContainer>
 
       <div className="absolute top-3 left-3 z-[1000] flex items-center gap-2">
@@ -229,7 +221,7 @@ export function DisasterMap({
         <div className="mb-1.5 font-medium">Legend</div>
         <div className="grid grid-cols-2 gap-x-4 gap-y-1">
           <Legend color="#dc2626" label="Trapped caller" round />
-          <Legend color="#f97316" label="Fire (now / forecast)" />
+          <Legend color="#f97316" label="Operator zones" />
           <Legend color="#d97706" label="Needs help" round />
           <Legend color="#7c3aed" label="Care facility" />
           <Legend color="#16a34a" label="Can leave" round />

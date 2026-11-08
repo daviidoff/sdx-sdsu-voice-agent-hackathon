@@ -1,0 +1,1373 @@
+{
+  "schema_version": "1.0",
+  "run_id": "bad54a29-b269-429a-b494-c0789df39ae6",
+  "request_key": "37c72acae777d0acee29c28f",
+  "incident_id": "demo-flood-001",
+  "mode": "mock",
+  "attributions": [],
+  "status": "completed",
+  "started_at": "2026-11-08T22:27:54.395753+00:00",
+  "finished_at": "2026-11-08T22:27:54.397248+00:00",
+  "request": {
+    "incident_id": "demo-flood-001",
+    "locations": [
+      "San Diego, California, USA"
+    ],
+    "categories": [
+      "care_home",
+      "disability_support",
+      "health_clinic",
+      "shelter",
+      "accessible_transport",
+      "community_organization"
+    ],
+    "country_code": "US",
+    "sources": [
+      "maps",
+      "web"
+    ],
+    "bounds": [
+      -117.3,
+      32.6,
+      -117.0,
+      32.9
+    ],
+    "max_tasks": 12,
+    "max_results_per_task": 20,
+    "max_leads": 100,
+    "concurrency": 3,
+    "task_timeout_seconds": 120,
+    "max_charge_usd_per_task": 0.5
+  },
+  "summary": {
+    "tasks_planned": 12,
+    "tasks_executed": 12,
+    "tasks_failed": 0,
+    "tasks_skipped": 0,
+    "leads_found": 11,
+    "leads_returned": 11,
+    "leads_omitted": 0,
+    "leads_with_phone": 7
+  },
+  "coverage": {
+    "population_coverage": "unknown",
+    "exhaustive": false,
+    "note": "Completion means the bounded searches finished, not that every facility or person was found."
+  },
+  "tasks": [
+    {
+      "task_id": "eea4b5f316209cce223476b5",
+      "location": "San Diego, California, USA",
+      "category": "care_home",
+      "source": "maps",
+      "query": "residential care home assisted living",
+      "started_at": "2026-11-08T22:27:54.396392+00:00",
+      "status": "succeeded",
+      "provider_run_id": null,
+      "provider_build_id": null,
+      "records_received": 3,
+      "invalid_records": 0,
+      "limit_reached": false,
+      "warnings": [],
+      "finished_at": "2026-11-08T22:27:54.396632+00:00"
+    },
+    {
+      "task_id": "405da60b0744fc0b3664a607",
+      "location": "San Diego, California, USA",
+      "category": "care_home",
+      "source": "web",
+      "query": "residential care home assisted living",
+      "started_at": "2026-11-08T22:27:54.396752+00:00",
+      "status": "succeeded",
+      "provider_run_id": null,
+      "provider_build_id": null,
+      "records_received": 1,
+      "invalid_records": 0,
+      "limit_reached": false,
+      "warnings": [],
+      "finished_at": "2026-11-08T22:27:54.396773+00:00"
+    },
+    {
+      "task_id": "7d2111cd1affa689e42b2a0b",
+      "location": "San Diego, California, USA",
+      "category": "disability_support",
+      "source": "maps",
+      "query": "disability support services",
+      "started_at": "2026-11-08T22:27:54.396691+00:00",
+      "status": "succeeded",
+      "provider_run_id": null,
+      "provider_build_id": null,
+      "records_received": 2,
+      "invalid_records": 0,
+      "limit_reached": false,
+      "warnings": [],
+      "finished_at": "2026-11-08T22:27:54.396741+00:00"
+    },
+    {
+      "task_id": "1a6b9500871f9367b6d25e10",
+      "location": "San Diego, California, USA",
+      "category": "disability_support",
+      "source": "web",
+      "query": "disability support services",
+      "started_at": "2026-11-08T22:27:54.396893+00:00",
+      "status": "succeeded",
+      "provider_run_id": null,
+      "provider_build_id": null,
+      "records_received": 1,
+      "invalid_records": 0,
+      "limit_reached": false,
+      "warnings": [],
+      "finished_at": "2026-11-08T22:27:54.396906+00:00"
+    },
+    {
+      "task_id": "98f20c89610d2818134eb80e",
+      "location": "San Diego, California, USA",
+      "category": "health_clinic",
+      "source": "maps",
+      "query": "health clinic",
+      "started_at": "2026-11-08T22:27:54.396839+00:00",
+      "status": "succeeded",
+      "provider_run_id": null,
+      "provider_build_id": null,
+      "records_received": 3,
+      "invalid_records": 0,
+      "limit_reached": false,
+      "warnings": [],
+      "finished_at": "2026-11-08T22:27:54.396886+00:00"
+    },
+    {
+      "task_id": "96fe1263a6f7cc8d1f164036",
+      "location": "San Diego, California, USA",
+      "category": "health_clinic",
+      "source": "web",
+      "query": "health clinic",
+      "started_at": "2026-11-08T22:27:54.396813+00:00",
+      "status": "succeeded",
+      "provider_run_id": null,
+      "provider_build_id": null,
+      "records_received": 1,
+      "invalid_records": 0,
+      "limit_reached": false,
+      "warnings": [],
+      "finished_at": "2026-11-08T22:27:54.396833+00:00"
+    },
+    {
+      "task_id": "2301b10a195d0e04599fd95c",
+      "location": "San Diego, California, USA",
+      "category": "shelter",
+      "source": "maps",
+      "query": "community shelter",
+      "started_at": "2026-11-08T22:27:54.396941+00:00",
+      "status": "succeeded",
+      "provider_run_id": null,
+      "provider_build_id": null,
+      "records_received": 2,
+      "invalid_records": 0,
+      "limit_reached": false,
+      "warnings": [],
+      "finished_at": "2026-11-08T22:27:54.396978+00:00"
+    },
+    {
+      "task_id": "2471622d50180cd25ce99b79",
+      "location": "San Diego, California, USA",
+      "category": "shelter",
+      "source": "web",
+      "query": "community shelter",
+      "started_at": "2026-11-08T22:27:54.397065+00:00",
+      "status": "succeeded",
+      "provider_run_id": null,
+      "provider_build_id": null,
+      "records_received": 1,
+      "invalid_records": 0,
+      "limit_reached": false,
+      "warnings": [],
+      "finished_at": "2026-11-08T22:27:54.397078+00:00"
+    },
+    {
+      "task_id": "edc3d21fbb9fb81a44a8ae4b",
+      "location": "San Diego, California, USA",
+      "category": "accessible_transport",
+      "source": "maps",
+      "query": "wheelchair accessible transport",
+      "started_at": "2026-11-08T22:27:54.397032+00:00",
+      "status": "succeeded",
+      "provider_run_id": null,
+      "provider_build_id": null,
+      "records_received": 2,
+      "invalid_records": 0,
+      "limit_reached": false,
+      "warnings": [],
+      "finished_at": "2026-11-08T22:27:54.397060+00:00"
+    },
+    {
+      "task_id": "553fc14a2071b22954fe65b1",
+      "location": "San Diego, California, USA",
+      "category": "accessible_transport",
+      "source": "web",
+      "query": "wheelchair accessible transport",
+      "started_at": "2026-11-08T22:27:54.396982+00:00",
+      "status": "succeeded",
+      "provider_run_id": null,
+      "provider_build_id": null,
+      "records_received": 1,
+      "invalid_records": 0,
+      "limit_reached": false,
+      "warnings": [],
+      "finished_at": "2026-11-08T22:27:54.396995+00:00"
+    },
+    {
+      "task_id": "a6bfd3363498fe0b080f3e8e",
+      "location": "San Diego, California, USA",
+      "category": "community_organization",
+      "source": "maps",
+      "query": "community assistance organization",
+      "started_at": "2026-11-08T22:27:54.396998+00:00",
+      "status": "succeeded",
+      "provider_run_id": null,
+      "provider_build_id": null,
+      "records_received": 1,
+      "invalid_records": 0,
+      "limit_reached": false,
+      "warnings": [],
+      "finished_at": "2026-11-08T22:27:54.397013+00:00"
+    },
+    {
+      "task_id": "ad4624caae99f6ccc91d6d70",
+      "location": "San Diego, California, USA",
+      "category": "community_organization",
+      "source": "web",
+      "query": "community assistance organization",
+      "started_at": "2026-11-08T22:27:54.397015+00:00",
+      "status": "succeeded",
+      "provider_run_id": null,
+      "provider_build_id": null,
+      "records_received": 1,
+      "invalid_records": 0,
+      "limit_reached": false,
+      "warnings": [],
+      "finished_at": "2026-11-08T22:27:54.397026+00:00"
+    }
+  ],
+  "skipped_tasks": [],
+  "leads": [
+    {
+      "lead_id": "93a7cbdf383532b62730594e",
+      "incident_id": "demo-flood-001",
+      "name": "DEMO Access Community Center",
+      "place_ids": [
+        "mock-access-center"
+      ],
+      "categories": [
+        "disability_support"
+      ],
+      "category_basis": "search_query_unverified",
+      "address": "200 Example Lane, San Diego, CA",
+      "coordinates": {
+        "lat": 32.74,
+        "lng": -117.14
+      },
+      "area_match": "inside",
+      "website": null,
+      "source_url": "https://directory.example.org/access-center",
+      "phone_candidates": [
+        {
+          "number": "+16195550102",
+          "extension": "20",
+          "raw": "+1 619 555 0102 ext. 20",
+          "verification": "format_only"
+        }
+      ],
+      "phone": {
+        "number": "+16195550102",
+        "extension": "20",
+        "raw": "+1 619 555 0102 ext. 20",
+        "verification": "format_only"
+      },
+      "listed_closed": false,
+      "evidence": [
+        {
+          "evidence_id": "d1d749e1caff89fdbaf759bc",
+          "source": "maps",
+          "source_url": "https://directory.example.org/access-center",
+          "retrieved_at": "2026-11-08T22:27:54.396723+00:00",
+          "source_updated_at": null,
+          "task_id": "7d2111cd1affa689e42b2a0b",
+          "provider_run_id": null,
+          "query": "disability support services",
+          "search_location": "San Diego, California, USA",
+          "observed": {
+            "name": "DEMO Access Community Center",
+            "address": "200 Example Lane, San Diego, CA",
+            "coordinates": {
+              "lat": 32.74,
+              "lng": -117.14
+            },
+            "phone_raw": "+1 619 555 0102 ext. 20",
+            "phone": {
+              "number": "+16195550102",
+              "extension": "20",
+              "raw": "+1 619 555 0102 ext. 20",
+              "verification": "format_only"
+            },
+            "listed_closed": false
+          },
+          "excerpt": null
+        }
+      ],
+      "is_mock": true,
+      "review_status": "needs_review",
+      "contact_status": "not_contacted",
+      "safety_status": "unknown",
+      "capacity_status": "unknown",
+      "flags": [],
+      "next_action": "verify_contact_and_location",
+      "handoff": {
+        "status": "draft",
+        "dial_allowed": false,
+        "requires": [
+          "operator_review",
+          "verified_public_contact",
+          "incident_authorization"
+        ],
+        "suggested_questions": [
+          "Is this the public reception for this facility, and what is its current location?",
+          "Are there unmet assistance needs your organization can report?",
+          "Can reception relay the approved callback information to people who need help?",
+          "Which public organization should the response team contact next?"
+        ]
+      }
+    },
+    {
+      "lead_id": "13e025095fd662fdebc65f3c",
+      "incident_id": "demo-flood-001",
+      "name": "DEMO Access Transport North",
+      "place_ids": [
+        "mock-transport-north"
+      ],
+      "categories": [
+        "accessible_transport"
+      ],
+      "category_basis": "search_query_unverified",
+      "address": "700 Example Lane, San Diego, CA",
+      "coordinates": {
+        "lat": 32.78,
+        "lng": -117.17
+      },
+      "area_match": "inside",
+      "website": null,
+      "source_url": "https://directory.example.org/transport-north",
+      "phone_candidates": [
+        {
+          "number": "+16195550107",
+          "extension": null,
+          "raw": "619-555-0107",
+          "verification": "format_only"
+        }
+      ],
+      "phone": {
+        "number": "+16195550107",
+        "extension": null,
+        "raw": "619-555-0107",
+        "verification": "format_only"
+      },
+      "listed_closed": false,
+      "evidence": [
+        {
+          "evidence_id": "9aecaf3b4c863adbb7d86e2e",
+          "source": "maps",
+          "source_url": "https://directory.example.org/transport-north",
+          "retrieved_at": "2026-11-08T22:27:54.397038+00:00",
+          "source_updated_at": null,
+          "task_id": "edc3d21fbb9fb81a44a8ae4b",
+          "provider_run_id": null,
+          "query": "wheelchair accessible transport",
+          "search_location": "San Diego, California, USA",
+          "observed": {
+            "name": "DEMO Access Transport North",
+            "address": "700 Example Lane, San Diego, CA",
+            "coordinates": {
+              "lat": 32.78,
+              "lng": -117.17
+            },
+            "phone_raw": "619-555-0107",
+            "phone": {
+              "number": "+16195550107",
+              "extension": null,
+              "raw": "619-555-0107",
+              "verification": "format_only"
+            },
+            "listed_closed": false
+          },
+          "excerpt": null
+        }
+      ],
+      "is_mock": true,
+      "review_status": "needs_review",
+      "contact_status": "not_contacted",
+      "safety_status": "unknown",
+      "capacity_status": "unknown",
+      "flags": [
+        "shared_phone_across_facilities"
+      ],
+      "next_action": "verify_contact_and_location",
+      "handoff": {
+        "status": "draft",
+        "dial_allowed": false,
+        "requires": [
+          "operator_review",
+          "verified_public_contact",
+          "incident_authorization"
+        ],
+        "suggested_questions": [
+          "Is this the public reception for this facility, and what is its current location?",
+          "Are there unmet assistance needs your organization can report?",
+          "Can reception relay the approved callback information to people who need help?",
+          "Which public organization should the response team contact next?"
+        ]
+      }
+    },
+    {
+      "lead_id": "7f6e7b4a03679865cd3333b4",
+      "incident_id": "demo-flood-001",
+      "name": "DEMO Access Transport South",
+      "place_ids": [
+        "mock-transport-south"
+      ],
+      "categories": [
+        "accessible_transport"
+      ],
+      "category_basis": "search_query_unverified",
+      "address": "800 Example Lane, San Diego, CA",
+      "coordinates": {
+        "lat": 32.68,
+        "lng": -117.17
+      },
+      "area_match": "inside",
+      "website": null,
+      "source_url": "https://directory.example.org/transport-south",
+      "phone_candidates": [
+        {
+          "number": "+16195550107",
+          "extension": null,
+          "raw": "619-555-0107",
+          "verification": "format_only"
+        }
+      ],
+      "phone": {
+        "number": "+16195550107",
+        "extension": null,
+        "raw": "619-555-0107",
+        "verification": "format_only"
+      },
+      "listed_closed": false,
+      "evidence": [
+        {
+          "evidence_id": "55965815f147913baede9e80",
+          "source": "maps",
+          "source_url": "https://directory.example.org/transport-south",
+          "retrieved_at": "2026-11-08T22:27:54.397050+00:00",
+          "source_updated_at": null,
+          "task_id": "edc3d21fbb9fb81a44a8ae4b",
+          "provider_run_id": null,
+          "query": "wheelchair accessible transport",
+          "search_location": "San Diego, California, USA",
+          "observed": {
+            "name": "DEMO Access Transport South",
+            "address": "800 Example Lane, San Diego, CA",
+            "coordinates": {
+              "lat": 32.68,
+              "lng": -117.17
+            },
+            "phone_raw": "619-555-0107",
+            "phone": {
+              "number": "+16195550107",
+              "extension": null,
+              "raw": "619-555-0107",
+              "verification": "format_only"
+            },
+            "listed_closed": false
+          },
+          "excerpt": null
+        }
+      ],
+      "is_mock": true,
+      "review_status": "needs_review",
+      "contact_status": "not_contacted",
+      "safety_status": "unknown",
+      "capacity_status": "unknown",
+      "flags": [
+        "shared_phone_across_facilities"
+      ],
+      "next_action": "verify_contact_and_location",
+      "handoff": {
+        "status": "draft",
+        "dial_allowed": false,
+        "requires": [
+          "operator_review",
+          "verified_public_contact",
+          "incident_authorization"
+        ],
+        "suggested_questions": [
+          "Is this the public reception for this facility, and what is its current location?",
+          "Are there unmet assistance needs your organization can report?",
+          "Can reception relay the approved callback information to people who need help?",
+          "Which public organization should the response team contact next?"
+        ]
+      }
+    },
+    {
+      "lead_id": "e258c1ed654f0235dd95e9c2",
+      "incident_id": "demo-flood-001",
+      "name": "DEMO Community Assistance Hub",
+      "place_ids": [
+        "mock-hub"
+      ],
+      "categories": [
+        "shelter",
+        "community_organization"
+      ],
+      "category_basis": "search_query_unverified",
+      "address": "600 Example Lane, San Diego, CA",
+      "coordinates": {
+        "lat": 32.77,
+        "lng": -117.15
+      },
+      "area_match": "inside",
+      "website": null,
+      "source_url": "https://directory.example.org/hub",
+      "phone_candidates": [
+        {
+          "number": "+16195550106",
+          "extension": null,
+          "raw": "619-555-0106",
+          "verification": "format_only"
+        }
+      ],
+      "phone": {
+        "number": "+16195550106",
+        "extension": null,
+        "raw": "619-555-0106",
+        "verification": "format_only"
+      },
+      "listed_closed": false,
+      "evidence": [
+        {
+          "evidence_id": "6333d094ec00c0f729dd684a",
+          "source": "maps",
+          "source_url": "https://directory.example.org/hub",
+          "retrieved_at": "2026-11-08T22:27:54.396965+00:00",
+          "source_updated_at": null,
+          "task_id": "2301b10a195d0e04599fd95c",
+          "provider_run_id": null,
+          "query": "community shelter",
+          "search_location": "San Diego, California, USA",
+          "observed": {
+            "name": "DEMO Community Assistance Hub",
+            "address": "600 Example Lane, San Diego, CA",
+            "coordinates": {
+              "lat": 32.77,
+              "lng": -117.15
+            },
+            "phone_raw": "619-555-0106",
+            "phone": {
+              "number": "+16195550106",
+              "extension": null,
+              "raw": "619-555-0106",
+              "verification": "format_only"
+            },
+            "listed_closed": false
+          },
+          "excerpt": null
+        },
+        {
+          "evidence_id": "255f72f3b3ffbc0bf7320ae5",
+          "source": "maps",
+          "source_url": "https://directory.example.org/hub",
+          "retrieved_at": "2026-11-08T22:27:54.397002+00:00",
+          "source_updated_at": null,
+          "task_id": "a6bfd3363498fe0b080f3e8e",
+          "provider_run_id": null,
+          "query": "community assistance organization",
+          "search_location": "San Diego, California, USA",
+          "observed": {
+            "name": "DEMO Community Assistance Hub",
+            "address": "600 Example Lane, San Diego, CA",
+            "coordinates": {
+              "lat": 32.77,
+              "lng": -117.15
+            },
+            "phone_raw": "619-555-0106",
+            "phone": {
+              "number": "+16195550106",
+              "extension": null,
+              "raw": "619-555-0106",
+              "verification": "format_only"
+            },
+            "listed_closed": false
+          },
+          "excerpt": null
+        }
+      ],
+      "is_mock": true,
+      "review_status": "needs_review",
+      "contact_status": "not_contacted",
+      "safety_status": "unknown",
+      "capacity_status": "unknown",
+      "flags": [],
+      "next_action": "verify_contact_and_location",
+      "handoff": {
+        "status": "draft",
+        "dial_allowed": false,
+        "requires": [
+          "operator_review",
+          "verified_public_contact",
+          "incident_authorization"
+        ],
+        "suggested_questions": [
+          "Is this the public reception for this facility, and what is its current location?",
+          "Are there unmet assistance needs your organization can report?",
+          "Can reception relay the approved callback information to people who need help?",
+          "Which public organization should the response team contact next?"
+        ]
+      }
+    },
+    {
+      "lead_id": "59d76873d7e531cddeae23e6",
+      "incident_id": "demo-flood-001",
+      "name": "DEMO Harbor Care Residence",
+      "place_ids": [
+        "mock-harbor-care"
+      ],
+      "categories": [
+        "care_home",
+        "disability_support"
+      ],
+      "category_basis": "search_query_unverified",
+      "address": "100 Example Lane, San Diego, CA",
+      "coordinates": {
+        "lat": 32.72,
+        "lng": -117.16
+      },
+      "area_match": "inside",
+      "website": "https://harbor-care.example.org",
+      "source_url": "https://directory.example.org/harbor-care",
+      "phone_candidates": [
+        {
+          "number": "+16195550101",
+          "extension": null,
+          "raw": "(619) 555-0101",
+          "verification": "format_only"
+        },
+        {
+          "number": "+16195550101",
+          "extension": null,
+          "raw": "619-555-0101",
+          "verification": "format_only"
+        }
+      ],
+      "phone": {
+        "number": "+16195550101",
+        "extension": null,
+        "raw": "(619) 555-0101",
+        "verification": "format_only"
+      },
+      "listed_closed": false,
+      "evidence": [
+        {
+          "evidence_id": "b2d14b22d5c7e9055ee1ef60",
+          "source": "maps",
+          "source_url": "https://directory.example.org/harbor-care",
+          "retrieved_at": "2026-11-08T22:27:54.396417+00:00",
+          "source_updated_at": null,
+          "task_id": "eea4b5f316209cce223476b5",
+          "provider_run_id": null,
+          "query": "residential care home assisted living",
+          "search_location": "San Diego, California, USA",
+          "observed": {
+            "name": "DEMO Harbor Care Residence",
+            "address": "100 Example Lane, San Diego, CA",
+            "coordinates": {
+              "lat": 32.72,
+              "lng": -117.16
+            },
+            "phone_raw": "(619) 555-0101",
+            "phone": {
+              "number": "+16195550101",
+              "extension": null,
+              "raw": "(619) 555-0101",
+              "verification": "format_only"
+            },
+            "listed_closed": false
+          },
+          "excerpt": null
+        },
+        {
+          "evidence_id": "9b58f3a310e3ccc5847d4fe9",
+          "source": "maps",
+          "source_url": "https://directory.example.org/harbor-care-copy",
+          "retrieved_at": "2026-11-08T22:27:54.396583+00:00",
+          "source_updated_at": null,
+          "task_id": "eea4b5f316209cce223476b5",
+          "provider_run_id": null,
+          "query": "residential care home assisted living",
+          "search_location": "San Diego, California, USA",
+          "observed": {
+            "name": "DEMO Harbor Care Residence",
+            "address": "100 Example Lane, San Diego, CA",
+            "coordinates": {
+              "lat": 32.72,
+              "lng": -117.16
+            },
+            "phone_raw": "619-555-0101",
+            "phone": {
+              "number": "+16195550101",
+              "extension": null,
+              "raw": "619-555-0101",
+              "verification": "format_only"
+            },
+            "listed_closed": false
+          },
+          "excerpt": null
+        },
+        {
+          "evidence_id": "8216ec8c14369c261c704da0",
+          "source": "maps",
+          "source_url": "https://directory.example.org/harbor-care",
+          "retrieved_at": "2026-11-08T22:27:54.396703+00:00",
+          "source_updated_at": null,
+          "task_id": "7d2111cd1affa689e42b2a0b",
+          "provider_run_id": null,
+          "query": "disability support services",
+          "search_location": "San Diego, California, USA",
+          "observed": {
+            "name": "DEMO Harbor Care Residence",
+            "address": "100 Example Lane, San Diego, CA",
+            "coordinates": {
+              "lat": 32.72,
+              "lng": -117.16
+            },
+            "phone_raw": "(619) 555-0101",
+            "phone": {
+              "number": "+16195550101",
+              "extension": null,
+              "raw": "(619) 555-0101",
+              "verification": "format_only"
+            },
+            "listed_closed": false
+          },
+          "excerpt": null
+        }
+      ],
+      "is_mock": true,
+      "review_status": "needs_review",
+      "contact_status": "not_contacted",
+      "safety_status": "unknown",
+      "capacity_status": "unknown",
+      "flags": [],
+      "next_action": "verify_contact_and_location",
+      "handoff": {
+        "status": "draft",
+        "dial_allowed": false,
+        "requires": [
+          "operator_review",
+          "verified_public_contact",
+          "incident_authorization"
+        ],
+        "suggested_questions": [
+          "Is this the public reception for this facility, and what is its current location?",
+          "Are there unmet assistance needs your organization can report?",
+          "Can reception relay the approved callback information to people who need help?",
+          "Which public organization should the response team contact next?"
+        ]
+      }
+    },
+    {
+      "lead_id": "50016fd1bd5880dcace703de",
+      "incident_id": "demo-flood-001",
+      "name": "DEMO Bay Health Clinic",
+      "place_ids": [
+        "mock-bay-clinic"
+      ],
+      "categories": [
+        "health_clinic"
+      ],
+      "category_basis": "search_query_unverified",
+      "address": "300 Example Lane, San Diego, CA",
+      "coordinates": {
+        "lat": 32.73,
+        "lng": -117.13
+      },
+      "area_match": "inside",
+      "website": null,
+      "source_url": "https://directory.example.org/bay-clinic",
+      "phone_candidates": [
+        {
+          "number": "+16195550103",
+          "extension": null,
+          "raw": "619-555-0103",
+          "verification": "format_only"
+        },
+        {
+          "number": "+16195550199",
+          "extension": null,
+          "raw": "619-555-0199",
+          "verification": "format_only"
+        }
+      ],
+      "phone": null,
+      "listed_closed": false,
+      "evidence": [
+        {
+          "evidence_id": "d591ccaf9510f616031bfe81",
+          "source": "maps",
+          "source_url": "https://directory.example.org/bay-clinic",
+          "retrieved_at": "2026-11-08T22:27:54.396849+00:00",
+          "source_updated_at": null,
+          "task_id": "98f20c89610d2818134eb80e",
+          "provider_run_id": null,
+          "query": "health clinic",
+          "search_location": "San Diego, California, USA",
+          "observed": {
+            "name": "DEMO Bay Health Clinic",
+            "address": "300 Example Lane, San Diego, CA",
+            "coordinates": {
+              "lat": 32.73,
+              "lng": -117.13
+            },
+            "phone_raw": "619-555-0103",
+            "phone": {
+              "number": "+16195550103",
+              "extension": null,
+              "raw": "619-555-0103",
+              "verification": "format_only"
+            },
+            "listed_closed": false
+          },
+          "excerpt": null
+        },
+        {
+          "evidence_id": "655dc81dcc029b7932a6ee0e",
+          "source": "maps",
+          "source_url": "https://directory.example.org/bay-clinic-old",
+          "retrieved_at": "2026-11-08T22:27:54.396864+00:00",
+          "source_updated_at": null,
+          "task_id": "98f20c89610d2818134eb80e",
+          "provider_run_id": null,
+          "query": "health clinic",
+          "search_location": "San Diego, California, USA",
+          "observed": {
+            "name": "DEMO Bay Health Clinic",
+            "address": "300 Example Lane, San Diego, CA",
+            "coordinates": {
+              "lat": 32.73,
+              "lng": -117.13
+            },
+            "phone_raw": "619-555-0199",
+            "phone": {
+              "number": "+16195550199",
+              "extension": null,
+              "raw": "619-555-0199",
+              "verification": "format_only"
+            },
+            "listed_closed": false
+          },
+          "excerpt": null
+        }
+      ],
+      "is_mock": true,
+      "review_status": "needs_review",
+      "contact_status": "not_contacted",
+      "safety_status": "unknown",
+      "capacity_status": "unknown",
+      "flags": [
+        "phone_conflict"
+      ],
+      "next_action": "research_needed",
+      "handoff": {
+        "status": "draft",
+        "dial_allowed": false,
+        "requires": [
+          "operator_review",
+          "verified_public_contact",
+          "incident_authorization"
+        ],
+        "suggested_questions": [
+          "Is this the public reception for this facility, and what is its current location?",
+          "Are there unmet assistance needs your organization can report?",
+          "Can reception relay the approved callback information to people who need help?",
+          "Which public organization should the response team contact next?"
+        ]
+      }
+    },
+    {
+      "lead_id": "1575aacce82f42f94343d12a",
+      "incident_id": "demo-flood-001",
+      "name": "DEMO Community resources directory",
+      "place_ids": [],
+      "categories": [
+        "care_home",
+        "shelter",
+        "accessible_transport",
+        "community_organization"
+      ],
+      "category_basis": "search_query_unverified",
+      "address": null,
+      "coordinates": null,
+      "area_match": "unknown",
+      "website": null,
+      "source_url": "https://community.example.org/resources",
+      "phone_candidates": [],
+      "phone": null,
+      "listed_closed": false,
+      "evidence": [
+        {
+          "evidence_id": "2947418212c86455b6079198",
+          "source": "web",
+          "source_url": "https://community.example.org/resources",
+          "retrieved_at": "2026-11-08T22:27:54.396759+00:00",
+          "source_updated_at": null,
+          "task_id": "405da60b0744fc0b3664a607",
+          "provider_run_id": null,
+          "query": "residential care home assisted living",
+          "search_location": "San Diego, California, USA",
+          "observed": {
+            "name": "DEMO Community resources directory",
+            "address": null,
+            "coordinates": null,
+            "phone_raw": null,
+            "phone": null,
+            "listed_closed": false
+          },
+          "excerpt": "Synthetic community resource listing. No facility availability or resident safety has been confirmed."
+        },
+        {
+          "evidence_id": "96a1ff81b283d95fd2e58a56",
+          "source": "web",
+          "source_url": "https://community.example.org/resources",
+          "retrieved_at": "2026-11-08T22:27:54.397069+00:00",
+          "source_updated_at": null,
+          "task_id": "2471622d50180cd25ce99b79",
+          "provider_run_id": null,
+          "query": "community shelter",
+          "search_location": "San Diego, California, USA",
+          "observed": {
+            "name": "DEMO Community resources directory",
+            "address": null,
+            "coordinates": null,
+            "phone_raw": null,
+            "phone": null,
+            "listed_closed": false
+          },
+          "excerpt": "Synthetic community resource listing. No facility availability or resident safety has been confirmed."
+        },
+        {
+          "evidence_id": "6f314abed2bb55ad7c81c466",
+          "source": "web",
+          "source_url": "https://community.example.org/resources",
+          "retrieved_at": "2026-11-08T22:27:54.396986+00:00",
+          "source_updated_at": null,
+          "task_id": "553fc14a2071b22954fe65b1",
+          "provider_run_id": null,
+          "query": "wheelchair accessible transport",
+          "search_location": "San Diego, California, USA",
+          "observed": {
+            "name": "DEMO Community resources directory",
+            "address": null,
+            "coordinates": null,
+            "phone_raw": null,
+            "phone": null,
+            "listed_closed": false
+          },
+          "excerpt": "Synthetic community resource listing. No facility availability or resident safety has been confirmed."
+        },
+        {
+          "evidence_id": "ac60037d44226c8d27923b0a",
+          "source": "web",
+          "source_url": "https://community.example.org/resources",
+          "retrieved_at": "2026-11-08T22:27:54.397019+00:00",
+          "source_updated_at": null,
+          "task_id": "ad4624caae99f6ccc91d6d70",
+          "provider_run_id": null,
+          "query": "community assistance organization",
+          "search_location": "San Diego, California, USA",
+          "observed": {
+            "name": "DEMO Community resources directory",
+            "address": null,
+            "coordinates": null,
+            "phone_raw": null,
+            "phone": null,
+            "listed_closed": false
+          },
+          "excerpt": "Synthetic community resource listing. No facility availability or resident safety has been confirmed."
+        }
+      ],
+      "is_mock": true,
+      "review_status": "needs_review",
+      "contact_status": "not_contacted",
+      "safety_status": "unknown",
+      "capacity_status": "unknown",
+      "flags": [
+        "area_needs_review",
+        "missing_address",
+        "missing_coordinates",
+        "missing_or_unrecognized_phone",
+        "research_link_only"
+      ],
+      "next_action": "research_needed",
+      "handoff": {
+        "status": "draft",
+        "dial_allowed": false,
+        "requires": [
+          "operator_review",
+          "verified_public_contact",
+          "incident_authorization"
+        ],
+        "suggested_questions": [
+          "Is this the public reception for this facility, and what is its current location?",
+          "Are there unmet assistance needs your organization can report?",
+          "Can reception relay the approved callback information to people who need help?",
+          "Which public organization should the response team contact next?"
+        ]
+      }
+    },
+    {
+      "lead_id": "1cff6043309b7b7b6130f671",
+      "incident_id": "demo-flood-001",
+      "name": "DEMO Distant Care Residence",
+      "place_ids": [
+        "mock-outside"
+      ],
+      "categories": [
+        "care_home"
+      ],
+      "category_basis": "search_query_unverified",
+      "address": "900 Example Lane, Outside Demo Bounds, CA",
+      "coordinates": {
+        "lat": 33.2,
+        "lng": -117.2
+      },
+      "area_match": "outside",
+      "website": null,
+      "source_url": "https://directory.example.org/distant-care",
+      "phone_candidates": [
+        {
+          "number": "+16195550108",
+          "extension": null,
+          "raw": "619-555-0108",
+          "verification": "format_only"
+        }
+      ],
+      "phone": {
+        "number": "+16195550108",
+        "extension": null,
+        "raw": "619-555-0108",
+        "verification": "format_only"
+      },
+      "listed_closed": false,
+      "evidence": [
+        {
+          "evidence_id": "198a98d6fde627314a5172db",
+          "source": "maps",
+          "source_url": "https://directory.example.org/distant-care",
+          "retrieved_at": "2026-11-08T22:27:54.396613+00:00",
+          "source_updated_at": null,
+          "task_id": "eea4b5f316209cce223476b5",
+          "provider_run_id": null,
+          "query": "residential care home assisted living",
+          "search_location": "San Diego, California, USA",
+          "observed": {
+            "name": "DEMO Distant Care Residence",
+            "address": "900 Example Lane, Outside Demo Bounds, CA",
+            "coordinates": {
+              "lat": 33.2,
+              "lng": -117.2
+            },
+            "phone_raw": "619-555-0108",
+            "phone": {
+              "number": "+16195550108",
+              "extension": null,
+              "raw": "619-555-0108",
+              "verification": "format_only"
+            },
+            "listed_closed": false
+          },
+          "excerpt": null
+        }
+      ],
+      "is_mock": true,
+      "review_status": "needs_review",
+      "contact_status": "not_contacted",
+      "safety_status": "unknown",
+      "capacity_status": "unknown",
+      "flags": [
+        "outside_requested_bounds"
+      ],
+      "next_action": "research_needed",
+      "handoff": {
+        "status": "draft",
+        "dial_allowed": false,
+        "requires": [
+          "operator_review",
+          "verified_public_contact",
+          "incident_authorization"
+        ],
+        "suggested_questions": [
+          "Is this the public reception for this facility, and what is its current location?",
+          "Are there unmet assistance needs your organization can report?",
+          "Can reception relay the approved callback information to people who need help?",
+          "Which public organization should the response team contact next?"
+        ]
+      }
+    },
+    {
+      "lead_id": "ca905965420140fcec68e738",
+      "incident_id": "demo-flood-001",
+      "name": "DEMO Former Community Shelter",
+      "place_ids": [
+        "mock-old-shelter"
+      ],
+      "categories": [
+        "shelter"
+      ],
+      "category_basis": "search_query_unverified",
+      "address": "500 Example Lane, San Diego, CA",
+      "coordinates": {
+        "lat": 32.76,
+        "lng": -117.11
+      },
+      "area_match": "inside",
+      "website": null,
+      "source_url": "https://directory.example.org/former-shelter",
+      "phone_candidates": [
+        {
+          "number": "+16195550105",
+          "extension": null,
+          "raw": "619-555-0105",
+          "verification": "format_only"
+        }
+      ],
+      "phone": {
+        "number": "+16195550105",
+        "extension": null,
+        "raw": "619-555-0105",
+        "verification": "format_only"
+      },
+      "listed_closed": true,
+      "evidence": [
+        {
+          "evidence_id": "863e9f2f8f57e20b83f15152",
+          "source": "maps",
+          "source_url": "https://directory.example.org/former-shelter",
+          "retrieved_at": "2026-11-08T22:27:54.396949+00:00",
+          "source_updated_at": null,
+          "task_id": "2301b10a195d0e04599fd95c",
+          "provider_run_id": null,
+          "query": "community shelter",
+          "search_location": "San Diego, California, USA",
+          "observed": {
+            "name": "DEMO Former Community Shelter",
+            "address": "500 Example Lane, San Diego, CA",
+            "coordinates": {
+              "lat": 32.76,
+              "lng": -117.11
+            },
+            "phone_raw": "619-555-0105",
+            "phone": {
+              "number": "+16195550105",
+              "extension": null,
+              "raw": "619-555-0105",
+              "verification": "format_only"
+            },
+            "listed_closed": true
+          },
+          "excerpt": null
+        }
+      ],
+      "is_mock": true,
+      "review_status": "needs_review",
+      "contact_status": "not_contacted",
+      "safety_status": "unknown",
+      "capacity_status": "unknown",
+      "flags": [
+        "listed_closed"
+      ],
+      "next_action": "research_needed",
+      "handoff": {
+        "status": "draft",
+        "dial_allowed": false,
+        "requires": [
+          "operator_review",
+          "verified_public_contact",
+          "incident_authorization"
+        ],
+        "suggested_questions": [
+          "Is this the public reception for this facility, and what is its current location?",
+          "Are there unmet assistance needs your organization can report?",
+          "Can reception relay the approved callback information to people who need help?",
+          "Which public organization should the response team contact next?"
+        ]
+      }
+    },
+    {
+      "lead_id": "320b155e99758a7d6182c83e",
+      "incident_id": "demo-flood-001",
+      "name": "DEMO Neighborhood Clinic",
+      "place_ids": [
+        "mock-no-phone"
+      ],
+      "categories": [
+        "health_clinic"
+      ],
+      "category_basis": "search_query_unverified",
+      "address": "400 Example Lane, San Diego, CA",
+      "coordinates": {
+        "lat": 32.75,
+        "lng": -117.12
+      },
+      "area_match": "inside",
+      "website": null,
+      "source_url": "https://directory.example.org/neighborhood-clinic",
+      "phone_candidates": [],
+      "phone": null,
+      "listed_closed": false,
+      "evidence": [
+        {
+          "evidence_id": "c0002ae0d9fc36a838c1e982",
+          "source": "maps",
+          "source_url": "https://directory.example.org/neighborhood-clinic",
+          "retrieved_at": "2026-11-08T22:27:54.396876+00:00",
+          "source_updated_at": null,
+          "task_id": "98f20c89610d2818134eb80e",
+          "provider_run_id": null,
+          "query": "health clinic",
+          "search_location": "San Diego, California, USA",
+          "observed": {
+            "name": "DEMO Neighborhood Clinic",
+            "address": "400 Example Lane, San Diego, CA",
+            "coordinates": {
+              "lat": 32.75,
+              "lng": -117.12
+            },
+            "phone_raw": null,
+            "phone": null,
+            "listed_closed": false
+          },
+          "excerpt": null
+        }
+      ],
+      "is_mock": true,
+      "review_status": "needs_review",
+      "contact_status": "not_contacted",
+      "safety_status": "unknown",
+      "capacity_status": "unknown",
+      "flags": [
+        "missing_or_unrecognized_phone"
+      ],
+      "next_action": "research_needed",
+      "handoff": {
+        "status": "draft",
+        "dial_allowed": false,
+        "requires": [
+          "operator_review",
+          "verified_public_contact",
+          "incident_authorization"
+        ],
+        "suggested_questions": [
+          "Is this the public reception for this facility, and what is its current location?",
+          "Are there unmet assistance needs your organization can report?",
+          "Can reception relay the approved callback information to people who need help?",
+          "Which public organization should the response team contact next?"
+        ]
+      }
+    },
+    {
+      "lead_id": "35c07b3e936a3135ceffb3f4",
+      "incident_id": "demo-flood-001",
+      "name": "DEMO Public service directory",
+      "place_ids": [],
+      "categories": [
+        "disability_support",
+        "health_clinic"
+      ],
+      "category_basis": "search_query_unverified",
+      "address": null,
+      "coordinates": null,
+      "area_match": "unknown",
+      "website": null,
+      "source_url": "https://services.example.org/directory",
+      "phone_candidates": [],
+      "phone": null,
+      "listed_closed": false,
+      "evidence": [
+        {
+          "evidence_id": "f06084427c64b27780a391ce",
+          "source": "web",
+          "source_url": "https://services.example.org/directory",
+          "retrieved_at": "2026-11-08T22:27:54.396898+00:00",
+          "source_updated_at": null,
+          "task_id": "1a6b9500871f9367b6d25e10",
+          "provider_run_id": null,
+          "query": "disability support services",
+          "search_location": "San Diego, California, USA",
+          "observed": {
+            "name": "DEMO Public service directory",
+            "address": null,
+            "coordinates": null,
+            "phone_raw": null,
+            "phone": null,
+            "listed_closed": false
+          },
+          "excerpt": "Synthetic directory result. Source inspection is needed to attribute a public reception contact."
+        },
+        {
+          "evidence_id": "0acde69609d9ca370689ec60",
+          "source": "web",
+          "source_url": "https://services.example.org/directory",
+          "retrieved_at": "2026-11-08T22:27:54.396818+00:00",
+          "source_updated_at": null,
+          "task_id": "96fe1263a6f7cc8d1f164036",
+          "provider_run_id": null,
+          "query": "health clinic",
+          "search_location": "San Diego, California, USA",
+          "observed": {
+            "name": "DEMO Public service directory",
+            "address": null,
+            "coordinates": null,
+            "phone_raw": null,
+            "phone": null,
+            "listed_closed": false
+          },
+          "excerpt": "Synthetic directory result. Source inspection is needed to attribute a public reception contact."
+        }
+      ],
+      "is_mock": true,
+      "review_status": "needs_review",
+      "contact_status": "not_contacted",
+      "safety_status": "unknown",
+      "capacity_status": "unknown",
+      "flags": [
+        "area_needs_review",
+        "missing_address",
+        "missing_coordinates",
+        "missing_or_unrecognized_phone",
+        "research_link_only"
+      ],
+      "next_action": "research_needed",
+      "handoff": {
+        "status": "draft",
+        "dial_allowed": false,
+        "requires": [
+          "operator_review",
+          "verified_public_contact",
+          "incident_authorization"
+        ],
+        "suggested_questions": [
+          "Is this the public reception for this facility, and what is its current location?",
+          "Are there unmet assistance needs your organization can report?",
+          "Can reception relay the approved callback information to people who need help?",
+          "Which public organization should the response team contact next?"
+        ]
+      }
+    }
+  ]
+}

@@ -2,8 +2,8 @@
 
 export type LatLng = [number, number]
 
-export type Situation = 'can_leave' | 'needs_help' | 'trapped'
-export type CallStatus = 'active' | 'instructed' | 'help_assigned' | 'resolved'
+export type Situation = 'can_leave' | 'needs_help' | 'trapped' | 'unknown'
+export type CallStatus = 'active' | 'instructed' | 'help_assigned' | 'resolved' | 'ended'
 export type Speaker = 'caller' | 'agent' | 'steer' | 'system'
 
 export interface TranscriptLine {
@@ -19,12 +19,16 @@ export interface Call {
   callerName: string
   phone: string
   address: string
-  position: LatLng
-  people: number
+  position?: LatLng
+  people: number | null
   situation: Situation
   mobility: string
   status: CallStatus
   startedAt: number
+  instruction?: { zone_id?: string; text?: string; version?: number; source?: string }
+  mode?: string
+  wheelchairUsers?: number
+  scenarioId?: string
 }
 
 export interface Facility {
@@ -36,6 +40,7 @@ export interface Facility {
   area?: string
   contact: string
   mobilitySupport?: string
+  simulated?: boolean
   accessible?: boolean
 }
 
@@ -74,9 +79,11 @@ export type Selection = { kind: 'call' | 'crew' | 'zone'; id: string }
 export interface Zone {
   id: string
   label: string
-  level: 'evacuate' | 'warning'
+  level: 'evacuate' | 'warning' | 'shelter' | 'unknown'
   polygon: LatLng[]
   instruction: string
+  area?: string
+  version?: number
 }
 
 export interface FireStage {
@@ -85,6 +92,8 @@ export interface FireStage {
 }
 
 export type FeedEvent =
+  | { type: 'snapshot'; snapshot: import('./lib/feed').Snapshot }
+  | { type: 'connection'; error: string }
   | { type: 'call'; call: Call }
   | { type: 'line'; line: TranscriptLine }
 
@@ -93,5 +102,5 @@ export interface Feed {
   start(onEvent: (event: FeedEvent) => void): () => void
   /** Sends a steering instruction for a live call to the voice agent. */
   steer(callId: string, text: string, mode: 'context' | 'say'): Promise<void>
-  readonly source: 'fake' | 'supabase'
+  readonly source: 'fake' | 'supabase' | 'backend'
 }

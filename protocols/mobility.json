@@ -1,0 +1,8 @@
+{
+  "id": "mobility",
+  "version": "2026-11-08.1",
+  "title": "Assess accessible transport",
+  "tags": ["mobility", "wheelchair", "accessibility"],
+  "questions": ["What mobility assistance is needed?", "How many people need wheelchair spaces?", "Can they board the proposed vehicle with the available assistance?"],
+  "rules": ["Wheelchair places count within total passenger capacity.", "Unknown wheelchair count must be confirmed; one space may be used only as an explicitly labeled planning assumption.", "Other mobility needs require responder review; seat capacity alone does not establish suitability."]
+}

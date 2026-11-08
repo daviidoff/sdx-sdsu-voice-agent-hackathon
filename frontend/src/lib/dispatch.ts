@@ -68,7 +68,7 @@ export function crewPosition(r: Responder, dispatches: Dispatch[], now: number):
 }
 
 export const needsWheelchair = (call: Call) => /wheelchair/i.test(call.mobility)
-export const needsRescue = (call: Call) => call.status !== 'resolved' && call.situation !== 'can_leave'
+export const needsRescue = (call: Call) => call.status !== 'resolved' && call.status !== 'ended' && (call.situation === 'needs_help' || call.situation === 'trapped')
 
 /** Crews for a caller: available first, then ones that fit (wheelchair), then nearest. Code decides, not the model. */
 export function suggestCrews(call: Call, responders: Responder[], dispatches: Dispatch[], now: number) {
@@ -76,7 +76,7 @@ export function suggestCrews(call: Call, responders: Responder[], dispatches: Di
     .map((r) => {
       const fits = !needsWheelchair(call) || r.wheelchair
       const available = r.status === 'available' && !activeDispatch(dispatches, r.id)
-      return { responder: r, km: distanceKm(crewPosition(r, dispatches, now), call.position), fits, available }
+      return { responder: r, km: call.position ? distanceKm(crewPosition(r, dispatches, now), call.position) : Infinity, fits, available }
     })
     .sort((a, b) => Number(b.available) - Number(a.available) || Number(b.fits) - Number(a.fits) || a.km - b.km)
 }
@@ -87,7 +87,7 @@ export function suggestCalls(crew: Responder, calls: Call[], dispatches: Dispatc
   const here = crewPosition(crew, dispatches, now)
   return calls
     .filter((c) => needsRescue(c) && !covered.has(c.id))
-    .map((c) => ({ call: c, km: distanceKm(here, c.position), fits: !needsWheelchair(c) || crew.wheelchair }))
+    .map((c) => ({ call: c, km: c.position ? distanceKm(here, c.position) : Infinity, fits: !needsWheelchair(c) || crew.wheelchair }))
     .sort((a, b) => Number(b.fits) - Number(a.fits) || (a.call.situation === 'trapped' ? 0 : 1) - (b.call.situation === 'trapped' ? 0 : 1) || a.km - b.km)
 }
 

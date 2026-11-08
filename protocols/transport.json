@@ -1,0 +1,8 @@
+{
+  "id": "transport",
+  "version": "2026-11-08.1",
+  "title": "Assess transport assistance",
+  "tags": ["transport", "vehicle", "seats"],
+  "questions": ["Do you need transport?", "How many passenger places are needed?"],
+  "rules": ["Compare total passenger capacity against the confirmed group size.", "A candidate is a proposal requiring responder and provider confirmation, never a dispatch or rescue promise.", "Synthetic vehicles are demo fixtures, not available real resources."]
+}
