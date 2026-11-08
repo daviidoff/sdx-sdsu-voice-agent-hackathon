@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { CallDetail } from '@/components/CallDetail'
 import { CallList } from '@/components/CallList'
 import { DisasterMap } from '@/components/DisasterMap'
+import { crews } from '@/data/crews'
 import { api, createFeed, toCall, toFacilities, toLines } from '@/lib/feed'
 import type { Snapshot } from '@/lib/feed'
 import type { Call, Selection, TranscriptLine, Zone, LatLng } from '@/types'
@@ -75,10 +76,10 @@ export default function App() {
       </div>
       <main className="grid min-h-0 flex-1 grid-cols-[300px_1fr_400px]">
         <aside className="min-h-0 border-r bg-background">
-          <CallList calls={calls} lines={lines} zones={zones} facilities={facilities} responders={[]} dispatches={[]} selection={selectedCall ? { kind: 'call', id: selectedCall.id } : selection} onSelect={select} now={now} />
+          <CallList calls={calls} lines={lines} zones={zones} facilities={facilities} responders={crews} dispatches={[]} selection={selectedCall ? { kind: 'call', id: selectedCall.id } : selection} onSelect={select} now={now} />
         </aside>
         <section className="min-h-0">
-          <DisasterMap calls={calls} zones={zones} facilities={facilities} responders={[]} dispatches={[]} now={now} selection={selection} onSelect={select} drawing={drawing} onDrawingChange={setDrawing} onZoneDrawn={drawZone} />
+          <DisasterMap calls={calls} zones={zones} facilities={facilities} responders={crews} dispatches={[]} now={now} selection={selection} onSelect={select} drawing={drawing} onDrawingChange={setDrawing} onZoneDrawn={drawZone} />
         </section>
         <aside className="min-h-0 overflow-auto border-l bg-background">
           {draft ? <div className="space-y-4 p-4">
