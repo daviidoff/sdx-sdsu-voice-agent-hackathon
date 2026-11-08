@@ -21,10 +21,10 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def page(self, message=''):
-        body = f'''<!doctype html><meta charset="utf-8"><title>Relay provider setup</title>
+        body = f'''<!doctype html><meta charset="utf-8"><title>EmergencyOS provider setup</title>
         <style>body{{font:18px system-ui;max-width:650px;margin:60px auto;padding:24px}}
         input,select,button{{font:inherit;padding:12px;display:block;margin:14px 0;width:100%;box-sizing:border-box}}
-        .ok{{color:#17613e}}</style><h1>Relay provider setup</h1>
+        .ok{{color:#17613e}}</style><h1>EmergencyOS provider setup</h1>
         <p>This temporary page saves a provider key to this project's local, Git-ignored .env file.</p>
         <p class="ok">{html.escape(message)}</p><form method="post" action="/save" autocomplete="off">
         <input type="hidden" name="csrf" value="{TOKEN}">

@@ -1,6 +1,6 @@
 # Disaster-response crawler
 
-Discover public facility contacts from **OpenStreetMap through Overpass**, with no search-provider account, API key, or third-party Python dependency. Python 3.11+. Supabase and the voice agent remain separate integrations.
+Discover public facility contacts from **OpenStreetMap through Overpass**, with no search-provider account, API key, or third-party Python dependency. Python 3.11+. The worker can publish reports to the dashboard’s existing SQLite backend. Supabase and outbound calling remain separate integrations.
 
 ## Run live, without an account
 
@@ -49,7 +49,7 @@ Per-lead `website_enrichment` shows visited pages, errors, or skip reasons. The 
 
 Fetching is sequential, respects robots.txt, waits at least one second per host (longer for advertised crawl limits), and caches pages and robots policies within the job. Limits: 10 facilities by default (maximum 20), three pages per facility, 80 HTTP requests including redirects/robots, 1 MB per response, four hops per fetch, and a 25-second per-facility network-work deadline. OS DNS resolution can exceed that deadline. HTTP/HTTPS on standard ports only; private/reserved DNS addresses, cross-host redirects beyond `www`, and HTTPS downgrades are blocked. Connections are pinned to validated DNS addresses and TLS hostname verification stays enabled. No credentials, cookies, forms, scripts, or model instructions are executed.
 
-Live validation checked nine facility records using 14 HTTP requests and found one additional public contact on the San Diego LGBT Community Center’s contact page. The other records remained unresolved due to network, HTTP, or redirect failures. This check preceded the homepage fallback refinement; that fallback is covered by synthetic tests. The test suite now has 59 passing tests.
+Live validation checked nine facility records using 14 HTTP requests and found one additional public contact on the San Diego LGBT Community Center’s contact page. The other records remained unresolved due to network, HTTP, or redirect failures. This check preceded the homepage fallback refinement; that fallback is covered by synthetic tests. This earlier check preceded the German extraction and transport fixes described below.
 
 This is an HTML crawler. JavaScript-only contacts, PDFs, unlinked contact pages, cross-domain sites, and blocked pages may remain unresolved; it does not bypass access controls. Structured JSON-LD extraction and browser rendering are not implemented.
 
@@ -101,9 +101,34 @@ The launcher uploads only the Python worker and fixture, runs the job, retrieves
 
 ## Dashboard/backend handoff
 
-Python callers can use `discover(DiscoveryRequest.from_dict(payload), OSMProvider())`; import `OSMProvider` from `disaster_crawler.osm`. Library callers must set `sources: ["osm"]` explicitly. Run discovery in a background job. There is no hosted API, database migration, or authentication layer in this package.
+Python callers can use `discover(DiscoveryRequest.from_dict(payload), OSMProvider())`; import `OSMProvider` from `disaster_crawler.osm`. Library callers must set `sources: ["osm"]` explicitly. Run discovery in a background job. The root FastAPI app now owns durable ingestion; the worker does not access database files directly. This remains a local unauthenticated demo.
 
-Use [contracts/discovery.ts](contracts/discovery.ts) for ingestion. Store reports by `run_id` and incident-level suggestions by `(incident_id, mode, lead_id)`. Preserve evidence and prior reviewed decisions. `request_key` is a correlation hash, not an idempotency lock: running the CLI again makes another request. The backend owns authorization, durable jobs, global limits, cancellation, review state, and duplicate-call prevention.
+The backend creates `discovery_runs` and `discovery_facilities` in its existing SQLite database. `POST /api/discovery/import` validates and stores the complete report; `GET /api/discovery/runs` lists recent runs and `GET /api/discovery/runs/{run_id}` returns the full evidence. Repeating the same run is idempotent; reusing a run ID with different content returns 409. Facility keys include incident, mode, and lead ID. An older run cannot overwrite a newer projection. Team fixtures and call records are preserved. Imports never authorize calls or assert safety/capacity.
+
+From the repository root, discover and publish automatically:
+
+```sh
+PYTHONPATH=crawler .venv/bin/python -m disaster_crawler \
+  --provider osm --request crawler/examples/berlin-arkonaplatz-request.json \
+  --enrich-websites --max-websites 20 --output crawler/out/berlin-result.json \
+  --publish-url http://127.0.0.1:8000
+```
+
+To import an existing report without crawling again, use **Import crawler results** in the dashboard, or:
+
+```sh
+curl --fail-with-body http://127.0.0.1:8000/api/discovery/import \
+  -H 'Content-Type: application/json' \
+  --data-binary @crawler/out/berlin-arkonaplatz-fixed-result.json
+```
+
+The snapshot includes persisted discovered facilities alongside team contacts. Map markers and the Contacts list open details with normalized numbers, original formatting, evidence, source links, OSM tags, timestamps, and unresolved errors. The map initially fits the latest discovery area; **Show discovered facilities** returns to it. Multiple numbers remain review candidates. Existing reviewed decisions are not implemented yet; add them in a separate operator-owned record rather than overwriting discovery evidence.
+
+German extraction follows Kontakt/Impressum/Über uns/Standort links, recognizes Telefon, Empfang, Rezeption, Anmeldung and Zentrale, excludes fax/emergency/regulator contacts, and normalizes `030`, `0049`, `+49 (0)` and slash/dash separators. General numbers are not labeled reception. TLS verification stays enabled with a system CA-bundle fallback when Python lacks a default store. The pinned HTTPS transport uses the correct Host header and stops reading when the response closes, fixing self-redirects and closed-socket errors.
+
+Berlin validation reprocessed the saved live OSM response (preserving original retrieval times) and fetched websites live: **35 facilities, 19 with phone candidates, 18 with a single unambiguous number**, five additional contacts from 11 website attempts. One facility has conflicting website numbers. One expired certificate and one cross-domain redirect remain unresolved; four other checked sites yielded no extracted phone. This does not establish reachability or current facility capacity. The report is `out/berlin-arkonaplatz-fixed-result.json`. Browser validation confirmed the persisted markers and source-linked phone detail panel.
+
+Use [contracts/discovery.ts](contracts/discovery.ts) for ingestion. Store reports by `run_id` and incident-level suggestions by `(incident_id, mode, lead_id)`. Preserve evidence and prior reviewed decisions. `request_key` is a correlation hash, not an idempotency lock: running the CLI again makes another request. The backend owns authorization, durable jobs, global limits, cancellation, review state, and duplicate-call prevention. The Contacts workspace now supplies durable local searches, polygon selection, approval, browser mock calls, and attributed assistance reports; see `../frontend/README.md`. Real outbound telephone calling remains unimplemented.
 
 The earlier Apify adapter remains optional for compatibility, but it is not needed for this workflow. Only explicitly choosing `--provider apify` uses it or requires `APIFY_TOKEN`. The legacy `max_charge_usd_per_task` request field is ignored by OSM. The optional website-enrichment pass handles published contact pages after OSM discovery. General internet searching and official-directory lookup remain separate future providers.
 

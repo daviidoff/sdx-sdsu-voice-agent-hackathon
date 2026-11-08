@@ -8,6 +8,7 @@ from app.backend import create_app
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.delenv('DAYTONA_API_KEY', raising=False)
+    monkeypatch.setenv('GEOCODING_ENABLED', '0')
     monkeypatch.setenv('TEAM_DATA_DIR', str(tmp_path))
     (tmp_path / 'facilities.json').write_text(json.dumps([{'id': 'team-1', 'name': 'Team shelter', 'simulated': True}]))
     with TestClient(create_app(tmp_path / 'dashboard.sqlite')) as client:
@@ -71,6 +72,56 @@ def test_duplicate_areas_do_not_select_an_arbitrary_order(client):
     publish(client)
     publish(client, id='second-zone', level='evacuate')
     assert client.post(path + '/resolve', json={'location': 'Mission Valley'}).json()['action'] == 'unknown'
+
+
+def test_delete_instruction_refreshes_live_calls_and_preserves_history(client):
+    publish(client)
+    active, ended, other = start(client), start(client), start(client)
+    for path in (active, ended):
+        client.post(path + '/resolve', json={'location': 'Mission Valley'})
+    client.post(other + '/resolve', json={'location': 'Other area'})
+    client.post(ended + '/end')
+    before = client.get(active).json()
+    history = client.get(ended).json()
+    unrelated = client.get(other).json()
+
+    response = client.delete('/api/dashboard/zones/team-zone')
+    assert response.status_code == 200
+    assert response.json() == {'deleted': 'team-zone'}
+    assert client.get('/api/dashboard/snapshot').json()['zones'] == []
+    assert client.get('/api/dashboard/context').json()['zones'] == []
+    current = client.get(active).json()
+    assert current['instruction']['action'] == 'unknown'
+    assert current['instruction']['zone_id'] is None
+    assert current['revision'] == before['revision'] + 1
+    assert current['events'][-1]['type'] == 'instruction.updated'
+    assert current['events'][-1]['payload'] == current['instruction']
+    assert client.get(ended).json() == history
+    assert client.get(other).json() == unrelated
+    assert client.delete('/api/dashboard/zones/team-zone').status_code == 404
+    assert client.get(active).json() == current
+    new_call = start(client)
+    assert client.post(new_call + '/resolve', json={'location': 'Mission Valley'}).json()['action'] == 'unknown'
+
+
+def test_delete_overlapping_instruction_selects_remaining_zone(client):
+    publish(client)
+    publish(client, id='second-zone', level='evacuate')
+    path = start(client)
+    assert client.post(path + '/resolve', json={'location': 'Mission Valley'}).json()['action'] == 'unknown'
+    assert client.delete('/api/dashboard/zones/second-zone').status_code == 200
+    assert client.get(path).json()['instruction']['zone_id'] == 'team-zone'
+    assert client.get(path).json()['instruction']['action'] == 'shelter'
+
+
+def test_deleted_instruction_stays_deleted_on_restart(tmp_path, monkeypatch):
+    monkeypatch.setenv('TEAM_DATA_DIR', str(tmp_path))
+    database = tmp_path / 'deleted.sqlite'
+    with TestClient(create_app(database)) as client:
+        publish(client)
+        assert client.delete('/api/dashboard/zones/team-zone').status_code == 200
+    with TestClient(create_app(database)) as client:
+        assert client.get('/api/dashboard/snapshot').json()['zones'] == []
 
 
 def test_steering_queued_acknowledged_and_visible_in_snapshot(client):

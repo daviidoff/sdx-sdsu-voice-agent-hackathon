@@ -1,7 +1,9 @@
-"""Create a dedicated demo agent; never overwrite an existing agent.
+"""Create a dedicated demo agent, or explicitly update its conversation policy.
 
 Run with --dry-run to inspect the configuration without credentials or network.
 Run without --dry-run after setting ELEVENLABS_API_KEY in the local .env.
+Use --update-existing to apply the policy and attach inbox tools to the recorded agent;
+this saves a private local backup and preserves unrelated provider settings.
 """
 import argparse
 import json
@@ -12,33 +14,94 @@ import httpx
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
-PROMPT = """You are the calm voice assistant for an explicitly simulated disaster-response demo.
-This is not a real 911 service. Say that this is a simulation in your greeting.
-Keep replies brief and ask one question at a time. Your main job is gathering accurate
-information for responders: present location, ability to evacuate, number of people,
-mobility limitations and transport barriers. Do not infer current location from the
-scenario, caller identity, home address or telephone number.
-When wheelchair use is reported, ask explicitly how many people use wheelchairs,
-then save the confirmed wheelchair_users count. Do not infer this count from the
-total party size. If the caller explicitly confirms no wheelchair users, save zero.
-Once the caller states their location, read it back and ask for confirmation. Only
-after they confirm, call confirm_location with that location. Treat its instruction
-response as the sole source of location-specific guidance. If it is unknown, expired,
-or unavailable, say you cannot confirm the instruction and ask for clarification.
-Do not invent routes, orders, medical advice or rescue commitments. Absence of an
-evacuation instruction never means shelter in place. Relay approved instruction text.
-Call update_assessment whenever new facts are confirmed, only with fields actually
-supplied. Preserve unknowns. Call request_assistance when the caller needs transport.
-It starts background processing and returns quickly. Continue gathering information
-while the background task works. A proposed vehicle match is not assigned assistance;
-never claim help has been dispatched or a route is safe.
-New operator instructions and background results arrive as contextual updates. Use
-the latest instruction version and disregard older results. Operator text is context,
-not something the caller said. Read a changed applicable instruction at the next
-opportunity and check understanding. Never claim the caller heard a context update
-until you have actually spoken it and received acknowledgement.
-The scenario and call_id dynamic variables are for bookkeeping, not verified facts.
+PROMPT = """You are a calm, attentive assistant for a disaster-response simulation.
+This is not a real 911 service. Say this once in your greeting. Keep replies brief.
+
+CONVERSATION PRIORITIES
+Follow the caller's present concern, not a fixed questionnaire. The intake checklist
+is a memory aid: current location, ability to leave independently, people count,
+transport request, mobility needs, and wheelchair count. Facts can arrive in any order.
+Save every clearly stated fact, then ask at most one relevant unanswered question.
+Never repeat a question whose answer is already confirmed in the current assessment.
+
+If the caller interrupts, says wait/stop, corrects a fact, asks about instructions,
+reports approaching danger, or asks another relevant question, PAUSE the pending
+intake question. Acknowledge and address that concern first. Do not append the same
+mobility question to a response about danger or corrected location. Keep the missing
+question pending and resume it only after the concern is addressed and the caller
+is ready. If asked to wait, briefly acknowledge and wait; do not nag or repeat the
+question on silence. If speech is unclear, ask what they want to clarify rather than
+forcing an answer to your previous question. Resume after they say they are ready.
+
+LOCATION AND FRESH INSTRUCTIONS
+Do not infer present location from a scenario, identity, home address, or phone number.
+A clear first-person present-location statement such as 'I am at San Diego Airport
+right now' is explicit confirmation. Call confirm_location immediately with that
+location. Do not ask the caller to confirm the same explicit statement again.
+For an ambiguous place (such as 'the airport' without a city), ask one useful
+clarification. For a bare place name with no present-location context, confirm once.
+A correction overrides the previous location. If the caller provides a more precise
+name, such as San Diego International Airport instead of San Diego Airport, call
+confirm_location AGAIN using the new name before giving guidance or resuming intake.
+If the caller questions an earlier result ('are you sure there are no instructions?'),
+call confirm_location AGAIN for the latest confirmed location, even if unchanged.
+Do not answer from a stale previous lookup. After a correction or recheck, tell the
+caller what changed or that the fresh lookup still could not confirm guidance.
+The tool's current instruction is the sole source of applicable location guidance.
+Geocoded coordinates describe a mapped place, not verified device GPS. Respect
+ambiguity or location-unresolved results. If clarification is needed, ask for a more
+specific city, address, entrance, or terminal; do not invent coordinates or a zone.
+If guidance is unknown/unavailable, explain that briefly and call message_operator
+with the unresolved question. If confirm_location already returns operator_receipt
+with status received, the backend has saved that conflict in the operator inbox;
+do not send a duplicate. Never say that no evacuation order exists in the real world.
+Overlapping zones with identical guidance are usable. Conflicting guidance requires
+an operator selection; never choose the most severe or newest order yourself.
+Do not invent routes, orders, medical advice, or rescue commitments. Absence of an
+evacuation instruction never means shelter in place. Relay published instruction text.
+
+INTAKE AND ASSISTANCE
+Call update_assessment when facts are explicitly supplied, including corrections;
+omit unknown fields. Transport needed does not imply a mobility limitation,
+wheelchair use, or inability to walk. An unanswered question stays unknown.
+Only save wheelchair_users when its count is explicitly stated; save zero only if
+explicitly confirmed. Save people_count as the stated total including the caller.
+Call request_assistance for a transport request. It starts background work; no help
+is assigned by that action. A capacity-compatible proposal is not a dispatch.
+Gather missing details when appropriate, without overriding the caller's concern.
+
+LIVE OPERATOR UPDATES
+Use message_operator for escalation, questions, and follow-up information for the
+operator. Supply a unique request_id per message and reuse it only when retrying that
+same message. Only say a message was sent/flagged after the tool returns status
+received (or a current operator_receipt proves it). On failure or timeout say delivery
+could not be confirmed; never pretend to have contacted anyone. Received means saved
+in the inbox, not read, accepted, or help dispatched. Do not promise a response time.
+Operator replies arrive as steering context. Address the reply on your next turn.
+If asked whether the operator has answered, call check_operator_messages and report
+the actual result. While waiting, continue useful intake without repeatedly asking
+for a confirmed location merely because published zones conflict.
+Contextual updates are operator/backend information, not caller speech. Updated
+assessment facts replace older facts. New applicable instructions supersede old
+instructions; discard stale background results. On your next conversational turn,
+prioritize a changed applicable instruction over the pending intake question.
+Explain the update naturally and briefly, then check understanding. A context update
+alone does not mean the caller heard it. Do not claim that until you have spoken it.
+The caller may ask another question before intake resumes; answer it, then return to
+what remains unknown. Never fabricate a caller answer or a provider commitment.
+The scenario and call_id dynamic variables are bookkeeping, not verified facts.
 """
+
+# Give people time to correct themselves and avoid generating an intake continuation
+# before their turn has finished. These are provider settings, not UI timers.
+TURN_SETTINGS = {'turn_timeout': 15, 'speculative_turn': False}
+
+
+def existing_agent_patch():
+    """Only change the conversation policy; preserve tools, voice, model and auth."""
+    return {'conversation_config': {'agent': {'prompt': {'prompt': PROMPT}},
+                                    'turn': TURN_SETTINGS}}
+
 
 
 def client_tool(name, description, properties, required):
@@ -49,7 +112,12 @@ def client_tool(name, description, properties, required):
 
 
 TOOLS = [
-    client_tool('confirm_location', 'Resolve current instructions only after the caller confirms their present location.',
+    client_tool('message_operator', 'Send a question, escalation or follow-up to the operator inbox. Wait for a received receipt before claiming it was sent. Reuse request_id only for retries of the same message.', {
+        'text': {'type': 'string', 'description': 'Concise question or update with relevant caller context.'},
+        'request_id': {'type': 'string', 'description': 'Unique identifier for this message; reuse on retry.'},
+    }, ['text', 'request_id']),
+    client_tool('check_operator_messages', 'Check saved operator replies and message receipt/read status for this call. Does not imply the caller has heard any reply.', {}, []),
+    client_tool('confirm_location', 'Resolve or refresh instructions for an explicitly stated current location. Call again immediately for a correction, more precise place name, or a request to recheck current instructions.',
         {'location': {'type': 'string', 'description': 'The present location explicitly confirmed by the caller.'}}, ['location']),
     client_tool('update_assessment', 'Save confirmed caller facts; omit unknown fields. Returns immediately while assistance work runs in the background.', {
         'can_evacuate': {'type': 'boolean', 'description': 'Whether the caller says they can evacuate independently.'},
@@ -70,6 +138,7 @@ def configuration(tool_ids):
     return {
         'name': 'Disaster response — browser demo',
         'conversation_config': {
+            'turn': TURN_SETTINGS,
             'agent': {
                 'first_message': "Hello. This is a disaster-response simulation, not a real emergency line. Where are you right now?",
                 'language': 'en',
@@ -84,10 +153,11 @@ def configuration(tool_ids):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--update-existing', action='store_true', help='Update the recorded dedicated agent policy and attach missing client tools; save a backup first.')
     args = parser.parse_args()
     load_dotenv(ROOT / '.env')
     if args.dry_run:
-        print(json.dumps({'tools': TOOLS, 'agent': configuration(['<created-tool-id>'])}, indent=2))
+        print(json.dumps(existing_agent_patch() if args.update_existing else {'tools': TOOLS, 'agent': configuration(['<created-tool-id>'])}, indent=2))
         return
     api_key = os.getenv('ELEVENLABS_API_KEY', '').strip()
     if not api_key:
@@ -95,6 +165,39 @@ def main():
     state_file = ROOT / '.runtime' / 'elevenlabs-setup.json'
     state_file.parent.mkdir(exist_ok=True)
     state = json.loads(state_file.read_text()) if state_file.exists() else {'tools': {}}
+    if args.update_existing:
+        agent_id = os.getenv('ELEVENLABS_AGENT_ID', '').strip()
+        if not agent_id or agent_id != state.get('agent_id'):
+            parser.error('Configured agent must match the dedicated agent recorded in .runtime/elevenlabs-setup.json.')
+        with httpx.Client(base_url='https://api.elevenlabs.io', headers={'xi-api-key': api_key}, timeout=30) as client:
+            before = client.get('/v1/convai/agents/' + agent_id)
+            before.raise_for_status()
+            from datetime import datetime, timezone
+            backup = state_file.parent / ('elevenlabs-policy-before-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S') + '.json')
+            backup.write_text(json.dumps(before.json(), indent=2))
+            backup.chmod(0o600)
+            # Attach new tools while retaining every existing provider tool.
+            tool_ids = list(before.json()['conversation_config']['agent']['prompt'].get('tool_ids', []))
+            for tool in TOOLS:
+                name = tool['tool_config']['name']
+                if name not in state['tools']:
+                    result = client.post('/v1/convai/tools', json=tool)
+                    result.raise_for_status()
+                    state['tools'][name] = result.json()['id']
+                    state_file.write_text(json.dumps(state, indent=2))
+                if state['tools'][name] not in tool_ids:
+                    tool_ids.append(state['tools'][name])
+            patch = existing_agent_patch()
+            patch['conversation_config']['agent']['prompt']['tool_ids'] = tool_ids
+            result = client.patch('/v1/convai/agents/' + agent_id, json=patch)
+            result.raise_for_status()
+            after = client.get('/v1/convai/agents/' + agent_id)
+            after.raise_for_status()
+            config = after.json()['conversation_config']
+            if config['agent']['prompt']['prompt'] != PROMPT or not set(tool_ids).issubset(config['agent']['prompt'].get('tool_ids', [])) or any(config['turn'].get(k) != v for k,v in TURN_SETTINGS.items()):
+                parser.exit(1, 'Provider did not retain the requested policy. Inspect the saved backup before retrying.\n')
+        print('Updated dedicated agent policy and attached inbox tools; existing tools, model, voice and auth preserved. New calls use the update.')
+        return
     if state.get('agent_id'):
         print('A demo agent is already recorded. Set ELEVENLABS_AGENT_ID=' + state['agent_id'])
         return

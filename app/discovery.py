@@ -23,6 +23,37 @@ class Point(Record):
 class Phone(Record):
     number: str = Field(pattern=r'^\+[1-9][0-9]{7,14}$')
     extension: str | None = Field(default=None, pattern=r'^\d{1,8}$')
+    raw: str | None = None
+    role: str | None = None
+    source_url: str | None = None
+
+
+class Observation(Record):
+    osm_tags: dict[str, str] | None = None
+
+
+class Evidence(Record):
+    evidence_id: str
+    source: str
+    source_url: str | None = None
+    retrieved_at: str
+    excerpt: str | None = None
+    observed: Observation | None = None
+
+
+class WebsiteFailure(Record):
+    url: str
+    code: str
+
+
+class Enrichment(Record):
+    status: str
+    reason: str | None = None
+    errors: list[WebsiteFailure] = Field(default_factory=list)
+
+
+class SearchRequest(Record):
+    locations: list[str] = Field(default_factory=list)
 
 
 class Lead(Record):
@@ -34,9 +65,12 @@ class Lead(Record):
     coordinates: Point | None = None
     phone: Phone | None = None
     phone_candidates: list[Phone] = Field(max_length=100)
-    evidence: list[dict] = Field(max_length=200)
+    evidence: list[Evidence] = Field(max_length=200)
     flags: list[str] = Field(default_factory=list, max_length=100)
     is_mock: bool
+    website: str | None = None
+    source_url: str | None = None
+    website_enrichment: Enrichment | None = None
 
 
 class Report(Record):
@@ -48,6 +82,7 @@ class Report(Record):
     started_at: datetime
     finished_at: datetime
     leads: list[Lead] = Field(max_length=1000)
+    request: SearchRequest = Field(default_factory=SearchRequest)
 
     @model_validator(mode='after')
     def consistent(self):
@@ -77,7 +112,7 @@ def facilities(db):
 
 
 def save_report(db, report: Report):
-    raw = report.model_dump(mode='json')
+    raw = report.model_dump(mode='json', exclude_unset=True)
     serialized = json.dumps(raw, ensure_ascii=False, sort_keys=True, allow_nan=False)
     if len(serialized.encode()) > 10_000_000:
         raise HTTPException(413, 'Discovery report exceeds 10 MB')
@@ -102,7 +137,7 @@ def save_report(db, report: Report):
                     'latitude': point.get('lat'), 'longitude': point.get('lng'), 'contact': contact,
                     'simulated': lead['is_mock'], 'source': 'crawler', 'incident_id': report.incident_id,
                     'run_id': report.run_id, 'updated_at': raw['finished_at'],
-                    'discovery': {**lead, 'review_status': 'needs_review', 'contact_status': 'not_contacted',
+                    'discovery': {**lead, 'flags': lead.get('flags', []), 'review_status': 'needs_review', 'contact_status': 'not_contacted',
                                   'safety_status': 'unknown', 'capacity_status': 'unknown',
                                   'handoff': {'status': 'draft', 'dial_allowed': False}},
                     'attributions': raw.get('attributions', [])}

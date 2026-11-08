@@ -19,7 +19,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 from app.dashboard import DashboardZone, team_context, transport_resources, zones, instruction_for
+from app.geography import initialize as initialize_geography, resolve_place
 from app.discovery import initialize as initialize_discovery, router as discovery_router
+from app.contacts import initialize as initialize_contacts, overview as contact_overview, router as contact_router
 
 
 SCENARIOS = [
@@ -83,6 +85,19 @@ class SteeringAcknowledgement(BaseModel):
     status: Literal["context_delivered"] = "context_delivered"
 
 
+class OperatorMessage(TextInput):
+    request_id: str = Field(min_length=1, max_length=200)
+
+
+class InboxRead(BaseModel):
+    through_event_id: int = Field(ge=0)
+
+
+class OperatorInstruction(BaseModel):
+    zone_id: str
+    revision: int
+
+
 def zone_for(location: str) -> str | None:
     # Fixture matching only: do not pretend to geocode arbitrary addresses.
     normalized = " ".join(re.sub(r"[^a-z0-9 ]", " ", location.lower()).split())
@@ -109,6 +124,9 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
             CREATE INDEX IF NOT EXISTS events_call ON events(call_id, id);
         """)
         initialize_discovery(db)
+        initialize_contacts(db)
+        api.state.contact_semaphore = asyncio.Semaphore(3)
+        initialize_geography(db)
         api.state.db = db
         api.state.jobs = set()
         for zone, action, text in [
@@ -139,8 +157,9 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
 
     api = FastAPI(title="Disaster response demo API", lifespan=lifespan)
     api.include_router(discovery_router)
+    api.include_router(contact_router)
     origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8000,http://127.0.0.1:8000").split(",")
-    api.add_middleware(CORSMiddleware, allow_origins=[origin.strip() for origin in origins if origin.strip()], allow_methods=["GET", "POST"], allow_headers=["Content-Type", "Last-Event-ID"])
+    api.add_middleware(CORSMiddleware, allow_origins=[origin.strip() for origin in origins if origin.strip()], allow_methods=["GET", "POST", "DELETE"], allow_headers=["Content-Type", "Last-Event-ID"])
 
     def db():
         return api.state.db
@@ -170,6 +189,43 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
 
     def full(call_id):
         return {**read_call(call_id), "events": events(call_id)}
+
+    def send_to_operator(call, text, request_id, source="agent"):
+        previous = next((e for e in events(call['id']) if e['type'] == 'operator.requested'
+                         and e['payload'].get('request_id') == request_id), None)
+        if previous and previous['payload']['text'] != text:
+            raise HTTPException(409, 'Request ID already used for a different message')
+        receipt = previous or event(call['id'], 'operator.requested', {
+            'text': text, 'request_id': request_id, 'source': source,
+            'location': call['assessment'].get('location'), 'status': 'received'})
+        return {'status': 'received', 'message_id': receipt['id'], 'thread_id': call['id'],
+                'notice': 'Saved in the operator inbox. This does not mean an operator has read it or that help is assigned.'}
+
+    def dashboard_instruction(call):
+        location = call['assessment'].get('location') or ''
+        instruction = instruction_for(db(), location, call['assessment'].get('location_resolution'))
+        if instruction.get('match_status') == 'overlapping_zones':
+            signature = json.dumps([location, instruction['matching_zones']], sort_keys=True)
+            override = call.get('operator_instruction')
+            if override and override['signature'] == signature:
+                chosen = next(z for z in instruction['matching_zones'] if z['id'] == override['zone_id'])
+                call.pop('zone_conflict_request', None)
+                return {**instruction, 'zone_id': chosen['id'], 'action': chosen['action'],
+                        'text': chosen['text'], 'version': chosen['version'],
+                        'match_status': 'operator_resolved', 'authorized_by': 'operator'}
+            call.pop('operator_instruction', None)
+            pending = call.get('zone_conflict_request')
+            if not pending or pending['signature'] != signature:
+                pending = {'signature': signature, 'request_id': 'zone-conflict:' + str(uuid4())}
+                call['zone_conflict_request'] = pending
+            instruction['operator_receipt'] = send_to_operator(call,
+                'Conflicting instructions at ' + location + '. Please select the applicable instruction.\n' +
+                '\n'.join(f"{z['label']} (v{z['version']}): {z['text']}" for z in instruction['matching_zones']),
+                pending['request_id'], source='backend')
+        else:
+            call.pop('operator_instruction', None)
+            call.pop('zone_conflict_request', None)
+        return instruction
 
     api.state.store = SimpleNamespace(get_call=read_call, get_events=events, append_event=event, full_call=full)
 
@@ -205,11 +261,50 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         call["assessment"]["location"] = location
         call["assessment"]["location_confirmed_at"] = now()
         call["revision"] += 1
-        call["instruction"] = instruction_for(db(), location) if call["scenario_id"] == "dashboard" else lookup(location)
+        call["instruction"] = instruction_for(db(), location, call["assessment"].get("location_resolution")) if call["scenario_id"] == "dashboard" else lookup(location)
         save(call)
         event(call["id"], "assessment.updated", call["assessment"])
         event(call["id"], "instruction.updated", call["instruction"])
         return call["instruction"]
+
+    async def locate_dashboard(call_id, location, *, historical=False):
+        call = read_call(call_id, writable=not historical)
+        request_id = str(uuid4())
+        if historical:
+            expected_location = call["assessment"].get("location")
+        else:
+            if call['assessment'].get('location') != location:
+                call.pop('operator_instruction', None)
+                call.pop('zone_conflict_request', None)
+            call["assessment"]["location"] = location
+            call["assessment"]["location_confirmed_at"] = now()
+            call["assessment"]["location_resolution"] = {"status": "pending", "query": location, "request_id": request_id}
+            call["revision"] += 1
+            call["instruction"] = instruction_for(db(), location)
+            save(call)
+            event(call_id, "assessment.updated", call["assessment"])
+            event(call_id, "instruction.updated", call["instruction"])
+        resolution = await resolve_place(db(), location, team_context(db())["facilities"], zones(db()))
+        current = read_call(call_id)
+        if historical:
+            # Enrich map metadata explicitly, retaining the instruction and events
+            # actually seen during the ended conversation.
+            if current["status"] != "ended" or current["assessment"].get("location") != expected_location:
+                raise HTTPException(409, "Call state changed while resolving its location")
+            current["assessment"]["location_resolution"] = {**resolution, "enriched_after_call": True}
+            current["current_spatial_instruction"] = instruction_for(db(), location, resolution)
+            save(current)
+            return current["current_spatial_instruction"]
+        if current["status"] == "ended" or current["assessment"].get("location_resolution", {}).get("request_id") != request_id:
+            # A later location, cleared location, or call end wins over a delayed response.
+            return current.get("instruction") or {}
+        current["assessment"]["location_resolution"] = resolution
+        current["instruction"] = dashboard_instruction(current)
+        current["revision"] += 1
+        save(current)
+        event(call_id, "assessment.updated", current["assessment"])
+        event(call_id, "instruction.updated", current["instruction"])
+        return current["instruction"]
 
     def launch_job(call):
         if call["status"] == "ended" or not (call["assessment"].get("transport_needed") or call["assessment"].get("can_evacuate") is False):
@@ -421,24 +516,38 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         call["assessment"].update(changes)
         call["revision"] += 1
         if "location" in changes:
-            call["instruction"] = (instruction_for(db(), changes["location"]) if call["scenario_id"] == "dashboard" else lookup(changes["location"])) if changes["location"] else None
-            event(call_id, "instruction.updated", call["instruction"])
+            call.pop('operator_instruction', None)
+            call.pop('zone_conflict_request', None)
+            # A corrected location invalidates its old coordinate evidence immediately.
+            call["assessment"].pop("location_resolution", None)
+            call["assessment"].pop("location_confirmed_at", None)
+            call["instruction"] = None
         save(call)
-        event(call_id, "assessment.updated", call["assessment"])
+        if "location" in changes and call["scenario_id"] == "dashboard" and changes["location"]:
+            await locate_dashboard(call_id, changes["location"])
+            call = read_call(call_id)
+        else:
+            if "location" in changes:
+                call["instruction"] = lookup(changes["location"]) if changes["location"] else None
+                save(call)
+                event(call_id, "instruction.updated", call["instruction"])
+            event(call_id, "assessment.updated", call["assessment"])
         launch_job(call)
         return full(call_id)
 
     @api.post("/api/calls/{call_id}/resolve")
     async def resolve_location(call_id: str, body: Location):
         call = read_call(call_id, writable=True)
-        result = resolve(call, body.location)
-        launch_job(call)
+        result = await locate_dashboard(call_id, body.location) if call["scenario_id"] == "dashboard" else resolve(call, body.location)
+        launch_job(read_call(call_id))
         return {**result, "dashboard_context": team_context(db())} if call["scenario_id"] == "dashboard" else result
 
     @api.post("/api/calls/{call_id}/steering")
     async def steering(call_id: str, body: TextInput):
         call = read_call(call_id, writable=True)
-        question = {"id": str(uuid4()), "text": body.text}
+        if not body.text.strip():
+            raise HTTPException(422, 'Message is empty')
+        question = {"id": str(uuid4()), "text": body.text.strip()}
         event(call_id, "steering.queued", {**question, "status": "queued", "simulation": True})
         if call["mode"] == "simulation":
             call["pending_operator_question"] = question
@@ -446,6 +555,58 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
             event(call_id, "steering.simulated", {**question, "status": "simulation_applied", "simulation": True})
             suffix = " " + intake_question(call) if call.get("pending_location") else ""
             say(call_id, "Demo responder asks: " + body.text + suffix)
+        return full(call_id)
+
+    @api.post('/api/calls/{call_id}/operator-messages')
+    async def operator_message(call_id: str, body: OperatorMessage):
+        call = read_call(call_id, writable=True)
+        if not body.text.strip():
+            raise HTTPException(422, 'Message is empty')
+        return send_to_operator(call, body.text.strip(), body.request_id)
+
+    @api.get('/api/calls/{call_id}/operator-messages')
+    async def operator_messages(call_id: str):
+        call = read_call(call_id)
+        history = events(call_id)
+        through = max((e['payload']['through_event_id'] for e in history if e['type'] == 'operator.read'), default=0)
+        return {'thread_id': call_id, 'call_status': call['status'],
+                'current_instruction': call.get('instruction'),
+                'messages': [{**e, 'read_by_operator': int(e['id']) <= through} for e in history
+                             if e['type'] == 'operator.requested'],
+                'replies': [e for e in history if e['type'] == 'steering.queued'],
+                'notice': 'Replies include history. Use current_instruction for applicable guidance; past replies may be superseded. Receipt or context delivery does not prove the caller heard them.'}
+
+    @api.post('/api/calls/{call_id}/inbox/read')
+    async def mark_inbox_read(call_id: str, body: InboxRead):
+        read_call(call_id)
+        history = events(call_id)
+        through = max((int(e['id']) for e in history if e['type'] == 'operator.requested'
+                       and int(e['id']) <= body.through_event_id), default=0)
+        previous = max((e['payload']['through_event_id'] for e in history if e['type'] == 'operator.read'), default=0)
+        if through > previous:
+            event(call_id, 'operator.read', {'through_event_id': through})
+        return {'through_event_id': max(through, previous)}
+
+    @api.post('/api/calls/{call_id}/operator-instruction')
+    async def select_operator_instruction(call_id: str, body: OperatorInstruction):
+        call = read_call(call_id, writable=True)
+        instruction = instruction_for(db(), call['assessment'].get('location') or '',
+                                      call['assessment'].get('location_resolution'))
+        if call['revision'] != body.revision or instruction.get('match_status') != 'overlapping_zones':
+            raise HTTPException(409, 'Call or instructions changed. Refresh before choosing guidance.')
+        chosen = next((z for z in instruction['matching_zones'] if z['id'] == body.zone_id), None)
+        if not chosen:
+            raise HTTPException(422, 'Choose an instruction that matches this location')
+        call['operator_instruction'] = {'zone_id': body.zone_id, 'signature': json.dumps([
+            call['assessment']['location'], instruction['matching_zones']], sort_keys=True)}
+        call['instruction'] = dashboard_instruction(call)
+        call['revision'] += 1
+        save(call)
+        event(call_id, 'instruction.updated', call['instruction'])
+        event(call_id, 'steering.queued', {'id': str(uuid4()), 'status': 'queued',
+            'instruction': call['instruction'],
+            'text': 'Operator selected the applicable instruction for this call: ' + chosen['text']})
+        launch_job(call)
         return full(call_id)
 
     @api.post("/api/calls/{call_id}/steering/{event_id}/ack")
@@ -510,7 +671,17 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     @api.get("/api/dashboard/snapshot")
     async def dashboard_snapshot():
         return {"calls": [full(row["id"]) for row in db().execute("SELECT id FROM calls ORDER BY rowid DESC")],
-                "zones": zones(db()), **team_context(db()), "source": "voice-backend", "updated_at": now()}
+                "zones": zones(db()), **team_context(db()), "contact_workflow": contact_overview(db()), "source": "voice-backend", "updated_at": now()}
+
+    @api.post("/api/dashboard/calls/{call_id}/geolocate")
+    async def refresh_call_location(call_id: str):
+        call = read_call(call_id)
+        if call["scenario_id"] != "dashboard" or not call["assessment"].get("location"):
+            raise HTTPException(409, "A dashboard call with a confirmed location is required")
+        await locate_dashboard(call_id, call["assessment"]["location"], historical=call["status"] == "ended")
+        if call["status"] != "ended":
+            launch_job(read_call(call_id))
+        return full(call_id)
 
     @api.get("/api/dashboard/context")
     async def dashboard_context():
@@ -523,13 +694,26 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         zone = {**body.model_dump(), "version": (previous or {}).get("version", 0) + 1, "updated_at": now()}
         db().execute("INSERT OR REPLACE INTO dashboard_zones VALUES (?, ?)", (body.id, json.dumps(zone)))
         db().commit()
+        refresh_dashboard_instructions()
+        return zone
+
+    @api.delete("/api/dashboard/zones/{zone_id}")
+    async def delete_zone(zone_id: str):
+        deleted = db().execute("DELETE FROM dashboard_zones WHERE id = ?", (zone_id,))
+        db().commit()
+        if deleted.rowcount == 0:
+            raise HTTPException(404, "Published instruction not found")
+        refresh_dashboard_instructions()
+        return {"deleted": zone_id}
+
+    def refresh_dashboard_instructions():
         # Refresh all dashboard calls, including those whose old area no longer matches.
         for row in db().execute("SELECT data FROM calls").fetchall():
             call = json.loads(row["data"])
             location = call["assessment"].get("location")
             if call["status"] == "ended" or call["scenario_id"] != "dashboard" or not location:
                 continue
-            instruction = instruction_for(db(), location)
+            instruction = dashboard_instruction(call)
             if instruction == call.get("instruction"):
                 continue
             call["instruction"] = instruction
@@ -537,7 +721,6 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
             save(call)
             event(call["id"], "instruction.updated", instruction)
             launch_job(call)
-        return zone
 
     return api
 

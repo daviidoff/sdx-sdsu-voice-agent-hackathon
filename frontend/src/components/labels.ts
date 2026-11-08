@@ -26,3 +26,10 @@ export const CREW_STATUS: Record<Responder['status'], { label: string; badge: st
   en_route: { label: 'En route', badge: 'bg-blue-600 text-white' },
   on_scene: { label: 'On scene', badge: 'bg-violet-600 text-white' },
 }
+
+/** A transport request is not a confirmed mobility limitation or a dispatch. */
+export function situationLabel(call: Call): string {
+  if (call.transportNeeded === true) return 'Transport requested'
+  if (call.canEvacuate === false) return 'Cannot leave independently'
+  return SITUATION[call.situation].label
+}

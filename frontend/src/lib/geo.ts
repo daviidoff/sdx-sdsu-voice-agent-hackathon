@@ -22,7 +22,7 @@ const SITUATION_RANK: Record<Call['situation'], number> = { trapped: 0, needs_he
 const STATUS_RANK: Record<Call['status'], number> = { active: 0, help_assigned: 1, instructed: 2, resolved: 3, ended: 4 }
 
 export function byPriority(a: Call, b: Call): number {
-  const resolved = Number(a.status === 'resolved') - Number(b.status === 'resolved')
+  const resolved = Number(a.status === 'resolved' || a.status === 'ended') - Number(b.status === 'resolved' || b.status === 'ended')
   if (resolved) return resolved
   return SITUATION_RANK[a.situation] - SITUATION_RANK[b.situation] || STATUS_RANK[a.status] - STATUS_RANK[b.status] || a.startedAt - b.startedAt
 }
@@ -30,4 +30,11 @@ export function byPriority(a: Call, b: Call): number {
 export function elapsed(from: number, now: number): string {
   const s = Math.max(0, Math.floor((now - from) / 1000))
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
+/** Ended sessions never use the moving clock. Missing historical duration stays unknown. */
+export function callDuration(call: Call, now: number): string {
+  const until = call.status === 'ended' || call.status === 'resolved' ? call.endedAt : now
+  if (!Number.isFinite(call.startedAt) || until === undefined || !Number.isFinite(until)) return '—'
+  return elapsed(call.startedAt, until)
 }

@@ -74,6 +74,10 @@ class TypedCall:
             try:
                 if name == 'confirm_location':
                     result = self.api(f'/api/calls/{self.call_id}/resolve', {'location': params['location']})
+                elif name == 'message_operator':
+                    result = self.api(f'/api/calls/{self.call_id}/operator-messages', params)
+                elif name == 'check_operator_messages':
+                    result = self.api(f'/api/calls/{self.call_id}/operator-messages')
                 elif name in {'update_assessment', 'request_assistance'}:
                     if name == 'request_assistance':
                         params = {**params, 'transport_needed': True}

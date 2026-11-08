@@ -22,7 +22,7 @@ def plan(request):
     return tasks[:request.max_tasks], tasks[request.max_tasks:]
 
 
-def discover(request, provider):
+def discover(request, provider, on_progress=None):
     started = now()
     tasks, skipped = plan(request)
     if hasattr(provider, "prepare"):
@@ -31,6 +31,8 @@ def discover(request, provider):
     def execute(task):
         report = {**asdict(task), "started_at": now(), "status": "running"}
         leads = []
+        if on_progress:
+            on_progress({"kind": "search", "id": task.task_id, "label": task.category, "status": "running"})
         try:
             result = provider.search(task, request)
             invalid = 0
@@ -50,6 +52,8 @@ def discover(request, provider):
             # External payloads/errors may contain credentials or personal data.
             report.update(status="failed", error_code="unexpected_provider_error")
         report["finished_at"] = now()
+        if on_progress:
+            on_progress({"kind": "search", "id": task.task_id, "label": task.category, "status": report["status"], "records": len(leads)})
         return report, leads
 
     with ThreadPoolExecutor(max_workers=request.concurrency) as pool:
@@ -60,7 +64,7 @@ def discover(request, provider):
     enrichment = None
     if request.enrich_websites:
         from .website import enrich_leads
-        enrichment = enrich_leads(leads, request.country_code, max_websites=request.max_websites)
+        enrichment = enrich_leads(leads, request.country_code, max_websites=request.max_websites, on_progress=on_progress)
     failures = sum(r["status"] == "failed" for r in reports)
     clipped = len(all_leads) > len(leads)
     partial = bool(failures or skipped or clipped or any(r.get("limit_reached") or r.get("invalid_records") or r.get("warnings") for r in reports))

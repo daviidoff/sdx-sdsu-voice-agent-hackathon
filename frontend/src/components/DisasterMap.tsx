@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import L from 'leaflet'
-import { CircleMarker, MapContainer, Marker, Polygon, Polyline, Rectangle, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet'
+import { CircleMarker, MapContainer, Marker, Polygon, Polyline, TileLayer, Tooltip, useMap } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
-import { PencilRuler, X } from 'lucide-react'
+import { PencilRuler } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { DrawPolygon } from './DrawPolygon'
 const MAP_CENTER: [number, number] = [32.7525, -117.1145]
 const MAP_ZOOM = 12
 import { activeDispatch, crewPosition, etaMin } from '@/lib/dispatch'
@@ -15,6 +16,9 @@ const FACILITY_STYLE: Record<string, { letter: string; color: string }> = {
   school: { letter: 'S', color: '#059669' },
   assisted_living: { letter: 'C', color: '#7c3aed' },
   memory_care: { letter: 'C', color: '#7c3aed' },
+  care_home: { letter: 'C', color: '#7c3aed' },
+  disability_support: { letter: 'C', color: '#7c3aed' },
+  health_clinic: { letter: '+', color: '#2563eb' },
   clinic: { letter: '+', color: '#2563eb' },
 }
 const CREW_LETTER: Record<Responder['kind'], string> = { engine: 'E', ambulance: 'M', wheelchair_van: 'W' }
@@ -66,42 +70,10 @@ function FlyTo({ target }: { target?: LatLng }) {
   const map = useMap()
   const key = target?.join(',')
   useEffect(() => {
-    if (target) map.flyTo(target, Math.max(map.getZoom(), 15), { duration: 0.6 })
+    if (target) map.flyTo(target, Math.max(map.getZoom(), 14), { duration: 0.6 })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, map])
   return null
-}
-
-// Police draw a rectangle: press, drag, release.
-function DrawRect({ active, onDone }: { active: boolean; onDone: (sw: LatLng, ne: LatLng) => void }) {
-  const [start, setStart] = useState<LatLng>()
-  const [end, setEnd] = useState<LatLng>()
-  const map = useMapEvents({
-    mousedown(e) {
-      if (!active) return
-      map.dragging.disable()
-      setStart([e.latlng.lat, e.latlng.lng])
-      setEnd([e.latlng.lat, e.latlng.lng])
-    },
-    mousemove(e) {
-      if (active && start) setEnd([e.latlng.lat, e.latlng.lng])
-    },
-    mouseup() {
-      if (!active || !start || !end) return
-      map.dragging.enable()
-      const sw: LatLng = [Math.min(start[0], end[0]), Math.min(start[1], end[1])]
-      const ne: LatLng = [Math.max(start[0], end[0]), Math.max(start[1], end[1])]
-      setStart(undefined)
-      setEnd(undefined)
-      if (Math.abs(ne[0] - sw[0]) > 0.0005 && Math.abs(ne[1] - sw[1]) > 0.0005) onDone(sw, ne)
-    },
-  })
-  useEffect(() => {
-    const el = map.getContainer()
-    el.style.cursor = active ? 'crosshair' : ''
-    if (!active) map.dragging.enable()
-  }, [active, map])
-  return start && end ? <Rectangle bounds={[start, end]} pathOptions={{ color: '#dc2626', weight: 2, dashArray: '6 6', fillOpacity: 0.1 }} /> : null
 }
 
 export function DisasterMap({
@@ -116,7 +88,12 @@ export function DisasterMap({
   drawing,
   onDrawingChange,
   onZoneDrawn,
+  draftZone,
+  contactsActive, contactPolygon, contactDrawing, onContactDrawn, onContactDrawingChange,
 }: {
+  contactsActive: boolean; contactPolygon: LatLng[]; contactDrawing: boolean
+  onContactDrawn: (points: LatLng[]) => void; onContactDrawingChange: (on: boolean) => void
+  draftZone?: Zone
   calls: Call[]
   facilities: Facility[]
   zones: Zone[]
@@ -127,17 +104,13 @@ export function DisasterMap({
   onSelect: (s: Selection) => void
   drawing: boolean
   onDrawingChange: (on: boolean) => void
-  onZoneDrawn: (sw: LatLng, ne: LatLng) => void
+  onZoneDrawn: (points: LatLng[]) => void
 }) {
+  const anyDrawing = drawing || contactDrawing
   const selectedCall = selection?.kind === 'call' ? calls.find((c) => c.id === selection.id) : undefined
   const selectedCrew = selection?.kind === 'crew' ? responders.find((r) => r.id === selection.id) : undefined
-  const flyTarget = selectedCall?.position ?? (selectedCrew ? crewPosition(selectedCrew, dispatches, now) : undefined)
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onDrawingChange(false)
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onDrawingChange])
+  const selectedFacility = selection?.kind === 'facility' ? facilities.find((f) => f.id === selection.id) : undefined
+  const flyTarget = selectedFacility?.position ?? selectedCall?.position ?? (selectedCrew ? crewPosition(selectedCrew, dispatches, now) : undefined)
 
   return (
     <div className="relative h-full w-full">
@@ -146,43 +119,46 @@ export function DisasterMap({
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        {zones.map((z) => {
+        {zones.filter((z) => z.polygon.length >= 3).map((z) => {
           const selected = selection?.kind === 'zone' && selection.id === z.id
           return (
             <Polygon
-              key={`${z.id}-${z.level}`}
+              key={`${z.id}-${z.level}-${drawing}`}
               positions={z.polygon}
-              eventHandlers={{ click: () => !drawing && onSelect({ kind: 'zone', id: z.id }) }}
+              interactive={!anyDrawing}
+              eventHandlers={{ click: () => !anyDrawing && onSelect({ kind: 'zone', id: z.id }) }}
               pathOptions={{ color: z.level === 'evacuate' ? '#dc2626' : '#d97706', weight: selected ? 4 : 2, dashArray: selected ? undefined : '6 6', fillOpacity: selected ? 0.14 : 0.06 }}
             >
-              <Tooltip sticky>{z.label} · click to edit</Tooltip>
+              <Tooltip sticky>{z.label} · {z.level} · v{z.version ?? 1} · click to edit</Tooltip>
             </Polygon>
           )
         })}
+        {draftZone && !draftZone.version && draftZone.polygon.length >= 3 && <Polygon key={`draft-${drawing}`} interactive={!anyDrawing} positions={draftZone.polygon} pathOptions={{ color: '#2563eb', weight: 3, dashArray: '4 6', fillOpacity: 0.08 }}><Tooltip sticky>Unpublished draft · publish to apply</Tooltip></Polygon>}
         {facilities.map((f) => f.position && (
-          <Marker key={f.id} position={f.position} icon={facilityIcon(f)}>
+          <Marker interactive={!anyDrawing} key={`${f.id}-${anyDrawing}`} position={f.position} icon={facilityIcon(f)} title={f.name} alt={f.name} eventHandlers={{ click: () => !anyDrawing && onSelect({ kind: 'facility', id: f.id }) }}>
             <Tooltip direction="top" offset={[0, -10]}>
               <div className="font-medium">{f.name}</div>
-              <div>{f.type.replaceAll('_', ' ')} · {f.contact}</div>
+              <div>{f.type.replaceAll('_', ' ')} · {f.contact || 'Phone needs review'}</div>
             </Tooltip>
           </Marker>
         ))}
         {dispatches
           .filter((d) => (d.status === 'en_route' || d.status === 'calling') && d.route.length > 1)
           .map((d) => (
-            <Polyline key={d.id} positions={d.route} pathOptions={{ color: '#2563eb', weight: 5, opacity: d.status === 'calling' ? 0.35 : 0.8, dashArray: d.status === 'calling' ? '4 8' : undefined }} />
+            <Polyline interactive={!anyDrawing} key={`${d.id}-${drawing}`} positions={d.route} pathOptions={{ color: '#2563eb', weight: 5, opacity: d.status === 'calling' ? 0.35 : 0.8, dashArray: d.status === 'calling' ? '4 8' : undefined }} />
           ))}
         {calls.filter((c) => c.position).map((c) => {
           const selected = selection?.kind === 'call' && selection.id === c.id
           return (
             <CircleMarker
-              key={c.id}
+              interactive={!anyDrawing}
+              key={`${c.id}-${anyDrawing}`}
               center={c.position!}
               radius={selected ? 13 : 9}
-              eventHandlers={{ click: () => onSelect({ kind: 'call', id: c.id }) }}
-              pathOptions={{ color: selected ? '#0f172a' : '#fff', weight: selected ? 3 : 2, fillColor: c.status === 'resolved' ? '#94a3b8' : SITUATION[c.situation].color, fillOpacity: 0.95 }}
+              eventHandlers={{ click: () => !anyDrawing && onSelect({ kind: 'call', id: c.id }) }}
+              pathOptions={{ color: selected ? '#0f172a' : '#fff', weight: selected ? 3 : 2, fillColor: c.status === 'resolved' || c.status === 'ended' ? '#94a3b8' : SITUATION[c.situation].color, fillOpacity: 0.95 }}
             >
-              <Tooltip direction="top" offset={[0, -8]}>{c.callerName} · {c.address}</Tooltip>
+              <Tooltip direction="top" offset={[0, -8]}>{c.callerName} · {c.address}<br />Approximate {c.locationResolution?.precision === 'intersection' ? 'intersection' : 'place reference'}{c.status === 'ended' ? ' · Call ended' : ''}</Tooltip>
             </CircleMarker>
           )
         })}
@@ -191,43 +167,45 @@ export function DisasterMap({
           const label = d?.status === 'en_route' ? `${r.name} · ${etaMin(d, now)} min` : d?.status === 'calling' ? `${r.name} · calling…` : d?.status === 'on_scene' ? `${r.name} · on scene` : r.name
           return (
             <Marker
-              key={r.id}
+              interactive={!anyDrawing}
+              key={`${r.id}-${drawing}`}
               position={crewPosition(r, dispatches, now)}
               icon={crewIcon(r, label, selection?.kind === 'crew' && selection.id === r.id)}
-              eventHandlers={{ click: () => onSelect({ kind: 'crew', id: r.id }) }}
+              eventHandlers={{ click: () => !anyDrawing && onSelect({ kind: 'crew', id: r.id }) }}
               zIndexOffset={1000}
             />
           )
         })}
-        <DrawRect active={drawing} onDone={onZoneDrawn} />
+        {contactsActive && contactPolygon.length >= 3 && !contactDrawing && <Polygon positions={contactPolygon} interactive={false} pathOptions={{ color: '#2563eb', dashArray: '5 5', weight: 2, fillOpacity: .06 }} />}
+        {contactsActive && contactDrawing && <DrawPolygon onDone={onContactDrawn} onCancel={() => onContactDrawingChange(false)} />}
+        <ContactAreaFocus polygon={contactsActive ? contactPolygon : []} />
+        {drawing && <DrawPolygon onDone={onZoneDrawn} onCancel={() => onDrawingChange(false)} />}
         <KeepSized />
+        <FitFacilities facilities={facilities} hidden={anyDrawing || !contactsActive} />
         <FlyTo target={flyTarget} />
       </MapContainer>
 
-      <div className="absolute top-3 left-3 z-[1000] flex items-center gap-2">
-        {drawing ? (
-          <div className="flex items-center gap-2 rounded-lg border border-red-300 bg-background/95 px-3 py-1.5 text-xs shadow-sm">
-            <PencilRuler className="size-3.5 text-red-600" /> Drag on the map to draw an evacuation zone
-            <Button size="xs" variant="ghost" onClick={() => onDrawingChange(false)}><X /> Cancel</Button>
-          </div>
-        ) : (
-          <Button size="sm" variant="outline" className="bg-background/95 shadow-sm" onClick={() => onDrawingChange(true)}>
-            <PencilRuler /> Draw evacuation zone
-          </Button>
-        )}
-      </div>
+      {!anyDrawing && !contactsActive && <div className="absolute top-3 left-3 z-[1000]">
+        <Button size="sm" variant="outline" className="bg-background/95 shadow-sm" onClick={() => onDrawingChange(true)}>
+          <PencilRuler /> Instruction Zone
+        </Button>
+      </div>}
 
+      {selectedCall && !selectedCall.position && !anyDrawing && !contactsActive && <div role="status" className="absolute top-16 left-3 z-[1000] max-w-sm rounded-lg border border-amber-300 bg-background/95 p-3 text-xs shadow-sm">
+        <div className="font-semibold">{selectedCall.callerName} · {selectedCall.locationResolution?.status === 'pending' ? 'Locating updated position…' : 'Current location has no map pin'}</div>
+        <p className="mt-1">{selectedCall.address}</p>
+        <p className="mt-1 text-muted-foreground">{selectedCall.locationResolution?.message || 'Waiting for coordinates for this location. Other call markers do not show this caller’s position.'}</p>
+      </div>}
       <div className="absolute bottom-6 left-3 z-[1000] rounded-lg border bg-background/95 p-3 text-xs shadow-sm">
         <div className="mb-1.5 font-medium">Legend</div>
         <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-          <Legend color="#dc2626" label="Trapped caller" round />
+          <Legend color="#64748b" label="Needs unconfirmed / ended" round />
           <Legend color="#f97316" label="Operator zones" />
-          <Legend color="#d97706" label="Needs help" round />
+          <Legend color="#d97706" label="Assistance requested" round />
           <Legend color="#7c3aed" label="Care facility" />
           <Legend color="#16a34a" label="Can leave" round />
           <Legend color="#059669" label="Shelter" />
-          <Legend color="#0f172a" label="Crew available" round />
-          <Legend color="#2563eb" label="Crew en route + route" round />
+
         </div>
       </div>
     </div>
@@ -241,4 +219,22 @@ function Legend({ color, label, round }: { color: string; label: string; round?:
       {label}
     </div>
   )
+}
+
+// Prefer the newest discovery area to avoid fitting Berlin and demo San Diego together.
+function FitFacilities({ facilities, hidden }: { facilities: Facility[]; hidden: boolean }) {
+  const map = useMap()
+  const mapped = facilities.filter((f) => f.position)
+  const discovered = mapped.filter((f) => f.discovery).sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
+  const targets = discovered.length ? discovered.filter((f) => f.runId === discovered[0].runId) : mapped
+  const fit = () => { if (targets.length) map.fitBounds(targets.map((f) => f.position!), { padding: [45, 65], maxZoom: 16 }) }
+  if (hidden) return null
+  return <div className="absolute right-3 top-3 z-[1000]"><Button size="sm" variant="outline" className="bg-background" disabled={!targets.length} onClick={fit}>Show discovered facilities</Button></div>
+}
+
+function ContactAreaFocus({ polygon }: { polygon: LatLng[] }) {
+  const map = useMap()
+  const key = JSON.stringify(polygon)
+  useEffect(() => { const points = JSON.parse(key) as LatLng[]; if (points.length) map.fitBounds(points, { padding: [35, 70], maxZoom: 15 }) }, [key, map])
+  return null
 }
