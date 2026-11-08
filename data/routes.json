@@ -1,1 +1,13 @@
-
+[
+  {
+    "id": "route-001",
+    "incident_id": "incident-001",
+    "facility_id": "facility-001",
+    "destination": "Demo Accessible Shelter A",
+    "accessible": true,
+    "summary": "Candidate route using Demo Northside Avenue",
+    "blocked_segments": ["Demo Canyon Road"],
+    "estimated_minutes": 12,
+    "status": "simulated_candidate"
+  }
+]
