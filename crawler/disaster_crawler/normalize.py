@@ -28,7 +28,8 @@ def safe_url(value):
 def phone_candidate(raw, country):
     """Conservative formatting, not proof of assignment or reachability."""
     raw = text(raw, 100)
-    match = re.fullmatch(r"([+\d() ./\u00a0-]+?)(?:\s*(?:ext\.?|x|#|durchwahl)\s*(\d{1,8}))?", raw, re.I)
+    formatted = raw.translate(str.maketrans({'–': '-', '—': '-', '‑': '-'}))
+    match = re.fullmatch(r"([+\d() ./\u00a0-]+?)(?:\s*(?:ext\.?|x|#|durchwahl)\s*(\d{1,8}))?", formatted, re.I)
     if not match:
         return None
     number, extension = match.groups()

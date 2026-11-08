@@ -21,6 +21,10 @@ Run `./scripts/run-demo.sh` from the repository root. The interface is on `http:
 | `POST /api/calls/{id}/resolve` | `{location}` resolves a caller-confirmed current location. |
 | `POST /api/calls/{id}/assessment` | Merge confirmed intake fields. |
 | `POST /api/calls/{id}/steering` | `{text}` queues operator context. |
+| `POST /api/calls/{id}/operator-messages` | `{text, request_id}` saves an agent message and returns `{status:"received", message_id, thread_id, notice}`. Retries reuse the request ID; changed text with the same ID is rejected. |
+| `GET /api/calls/{id}/operator-messages` | Saved requests, operator read state, replies, and current instruction. Available after call end. |
+| `POST /api/calls/{id}/inbox/read` | `{through_event_id}` marks only displayed agent requests read; later incoming messages remain unread. |
+| `POST /api/calls/{id}/operator-instruction` | `{zone_id, revision}` selects a currently matching conflicting instruction for this call. Rejects stale revisions and ended calls. |
 | `POST /api/calls/{id}/steering/{event_id}/ack` | `{status: "context_delivered"}` records delivery to the voice context, not that the caller heard it. |
 | `POST /api/calls/{id}/end` | Ends the call and schedules sandbox cleanup. |
 | `GET /api/instructions` | All three editable area instruction records. |
@@ -38,6 +42,7 @@ Every SSE message has `{id, call_id, type, payload, created_at}`. The `id` is a 
 - `call.started`, `call.ended`
 - `transcript`, `transcript.corrected`, `assessment.updated`, `instruction.updated`
 - `steering.queued`, `steering.acknowledged`, `steering.simulated`, `operator.followup`
+- `operator.requested` (saved agent/backend request), `operator.read` (operator read watermark)
 - `job.started`, `job.completed`, `job.failed`, `job.discarded`
 
 The browser forwards steering, instruction changes, and completed worker results through the active ElevenLabs SDK conversation. A context-delivered acknowledgement does not mean the assistant has spoken it. Disconnected voice clients cannot apply steering. A changed location, fact set, or instruction invalidates an older worker result. Job events include the snapshot `revision`; clients compare it with the current call revision before treating a result as current. Discarded jobs also identify `current_revision`.
@@ -54,7 +59,7 @@ Protocols specify intake questions and processing rules. Live instruction record
 
 Replace the fixture lookup and persistence behind the existing endpoints when the team chooses a shared database. Keep the session IDs, event stream, instruction versions, and stale-result checks. Add authenticated operator identity before using a remotely shared service. The current local browser owns the live SDK session; closing that browser loses live steering even though stored events remain.
 
-Actual phone calling, human voice takeover, real geographic boundary resolution, operational authorizations, and external dispatch are not implemented. This handoff does not assert provider runtime validation without a credentialed call.
+Actual phone calling, human voice takeover, operational authorizations, and external dispatch are not implemented. Dashboard calls now resolve named places and match operator polygons as described below. This handoff does not assert provider runtime validation without a credentialed call.
 
 
 ## Connected dashboard API
@@ -63,9 +68,16 @@ Actual phone calling, human voice takeover, real geographic boundary resolution,
   incidents, and routes. The dashboard polls once per second; corrected utterances replace their
   original IDs and ended calls remain ended, not resolved. A failed poll displays a stale-data warning.
 - `GET /api/dashboard/context`: current team records and published zones for the voice session.
+- `DELETE /api/dashboard/zones/{zone_id}`: deletes the published zone and its instruction, returning
+  `{deleted: zone_id}` (404 if absent). Recomputes instructions for active dashboard calls, emits
+  `instruction.updated`, and invalidates stale background work. Ended-call history is preserved.
 - `POST /api/dashboard/zones`: `{id, label, area, level, polygon?, instruction}` publishes a new version.
   `level` is `evacuate`, `warning`, `shelter`, or `unknown`. `polygon` uses `[latitude, longitude]` points.
-  Matching uses the confirmed `area` string only; conflicting area records yield unknown guidance.
+  Drawn zones match resolved location coordinates using boundary-inclusive polygon containment;
+  zones without polygons match the confirmed `area` name. Identical overlapping action/text is usable.
+  Conflicting overlaps remain unknown until the operator selects an applicable instruction or edits
+  the zones. They automatically create an inbox request, with `operator_receipt` in the resolve result.
+  Call-scoped selections are invalidated by location changes or changed matching zone versions.
 - `POST /api/calls` with `{mode:"elevenlabs", scenario_id:"dashboard"}` selects shared dashboard
   instructions and capacity records rather than the separate demonstration fixtures. Resolve returns
   the instruction plus current team context. Simulation mode is rejected for this scenario.
@@ -73,3 +85,32 @@ Actual phone calling, human voice takeover, real geographic boundary resolution,
 Run the dashboard at `/dashboard/`; Vite development uses port 5174 and proxies `/api` to port 8000.
 The phone stays at `/`. Team records retain their source/simulation labels. No Supabase credentials
 are needed for this path. The old scripted feed and automatic mock crew dispatch are not active.
+
+
+## Geographic evidence and historical calls
+
+Dashboard location confirmation resolves a caller's stated named place using team coordinate records
+or cached Photon/OpenStreetMap data. `assessment.location_resolution` contains `status`, `query`,
+`lat`/`lng` when resolved, display name, provenance, precision, and lookup time. `place_reference` means
+an approximate named-place point, not device GPS. Unknown/ambiguous/unavailable results have no marker.
+Location changes immediately invalidate previous spatial evidence and guidance; a late lookup cannot
+overwrite a newer correction or an ended call. Publishing a zone recomputes applicable instructions
+for active mapped calls and invalidates stale background jobs.
+
+`POST /api/dashboard/calls/{id}/geolocate` refreshes the saved caller location. For an ended call,
+`assessment.location_resolution.enriched_after_call` is true and `current_spatial_instruction` contains
+the later lookup. The original instruction, event history, and end time remain unchanged.
+Only explicit lookups call the geocoder; dashboard polling never geocodes. Configure `PHOTON_URL`
+or set `GEOCODING_ENABLED=0` to use only local records. Do not treat provider/place matching as
+caller GPS or invent a safe route from the map.
+
+
+A location tool may be called repeatedly within the same voice conversation. Each successful lookup
+updates the caller marker and recomputes the current polygon instruction. Moving outside all published
+polygons clears the previous order rather than preserving it. A subsequent move back inside retrieves
+the current version. Publishing a changed instruction also updates already located active calls.
+
+The geocoder prefers an exact named landmark (including queries qualified with a city after a comma)
+over businesses whose names merely extend that landmark name. Multiple equally exact results remain
+ambiguous. This name ranking selects a map feature; it never compares the caller phrase to a drawn
+zone's label. Live verification exercised airport → La Jolla Cove → airport and an operator update.

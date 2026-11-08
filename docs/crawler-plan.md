@@ -18,7 +18,7 @@ flowchart LR
     D --> E[Local classification, normalization, deduplication]
     E --> F[JSON contacts, locations, evidence, attribution]
     F --> W[Optional website enrichment for missing phones]
-    W --> G[Future dashboard review]
+    W --> G[Persisted dashboard contacts and source review]
     G --> H[Future voice-agent handoff]
 ```
 
@@ -59,12 +59,12 @@ A live request for the example central San Diego rectangle completed with 37 fac
 
 Automated tests cover synthetic Overpass responses, one-request fan-out, duplicate categories, phone conflicts, extensions, nodes/ways/relations, attribution, geographic bounds, clipping, malformed responses, runtime errors, and rate-limit failure reuse, alongside the existing discovery and provider tests.
 
-Actual Daytona account execution, Docker runtime, Supabase ingestion, dashboard display, and voice-agent calling remain separate unverified integrations. Local live discovery is verified; these other integrations are not implied by that result.
+Local discovery, SQLite report ingestion, and dashboard map display are now verified, including a Berlin website-enrichment rerun. The backend preserves complete reports and idempotent incident-scoped facility projections. Actual Daytona account execution, Docker runtime, Supabase ingestion, and outbound voice-agent calling remain separate unverified integrations.
 
 ## Next integration steps
 
-1. Import the mock JSON into the dashboard. For live jobs, pass the map-selected bounds with `sources: ["osm"]` and show attribution, source evidence, and unresolved contact gaps.
-2. Add durable backend jobs, incident access control, append-only evidence, a shared response cache, and global request limits before scaling. A thread-pool limit does not limit other processes.
+1. **Implemented:** import mock/live JSON through `/api/discovery/import`, the dashboard file picker, or crawler `--publish-url`. The map displays persisted coordinates, phone candidates, source evidence, timestamps, attribution, and unresolved gaps. Map-triggered discovery jobs are now available in Contacts; see the San Diego contact-workspace section below.
+2. Durable local discovery jobs and versioned report history are implemented. Add incident access control, a shared response cache, and cross-process global request limits before scaling. A thread-pool limit does not limit other processes.
 3. Run the same OSM request in the team's Daytona account and verify retrieval and sandbox cleanup. No additional search-provider credentials are needed.
 4. Add an operator approval action that creates a separate, authorized voice task. The voice agent can confirm reception identity and current location, ask about unmet needs, and ask reception to relay approved callback information.
 5. **Implemented:** enable `enrich_websites` to inspect listed websites for missing numbers. The bounded HTML crawler includes robots checks, public-IP validation with pinned connections, redirect/size limits, caching, and per-host spacing. It retains exact page/label evidence and marks branch ownership unverified. General public-directory lookup and JavaScript rendering remain future work.
@@ -91,3 +91,36 @@ References checked November 8, 2026:
 The user explicitly requested checking facility websites for missing reception numbers and retaining the source. This is now an optional, account-free pass over the returned leads. It reads at most three pages per facility and 80 total HTTP requests per job, including robots and redirects. `tel:` links and labeled visible numbers are extracted; scripts are not run. Existing phone candidates are never overwritten. Synthetic leads never trigger network requests.
 
 A site can expose a corporate switchboard, individual department numbers, or multiple branches. Candidates include the exact URL, local excerpt, extraction method, and a reception/main/general label. They remain unverified and require operator review. Multiple distinct numbers are retained as conflicts. Error reports distinguish robots exclusions, network/HTTP failure, unsupported formats, redirect limits, and budgets from successful pages without a number. The TypeScript contract includes these additive fields.
+
+## Contact workspace implemented (San Diego test incident)
+
+Berlin was a user-recognizable source-quality example, not the operational test region. The
+Contacts workspace defaults to San Diego, hides the Berlin report from its active contacts/map,
+and accepts bounded San Diego polygons. Existing stored evidence is retained.
+
+The root backend now owns durable `contact_searches`, `contact_sessions`, `contact_reports`, and
+`contact_reviews`. `POST /api/contacts/searches` starts bounded background discovery, reports actual
+category/website worker progress, applies polygon filtering, and imports the report into the
+shared facility store. One discovery job runs at a time per local backend. An interrupted search
+is marked interrupted on restart, not silently completed. Cross-process global limits and remote
+Daytona discovery execution remain future work.
+
+The UI separates discovery, operator approval, simulated contact, and report review. Approved
+mock calls can be answered by a human in the browser through a dedicated ElevenLabs reception
+agent or exercised by explicitly scripted mock workers (concurrency three). No phone provider
+is called. Session states distinguish awaiting receiver, connecting, connected, completed,
+failed, cancelled, and interrupted. Transcripts and contact snapshots retain attribution.
+
+The `record_contact_report` client tool writes cumulative reports and structured assistance
+needs. It requires an exact quote from persisted receiver speech/text; agent text cannot serve
+as the quote. Typed browser messages are persisted before being sent to ElevenLabs. Reception
+self-report is distinct from operator verification, and report corrections invalidate prior
+verification while preserving history. `GET /api/contacts/needs` is the source-attributed feed for
+future coordination work, and the shared dashboard/voice context includes the same `reported_needs`. Every need is marked mock and needs review; dispatch and need markers
+are not implemented.
+
+Verified: drawing/search/approval UI; an actual Hillcrest OSM job yielded seven facilities inside
+the polygon, four with a single phone; a real ElevenLabs connection produced audio and saved a
+mock two-person wheelchair-transport report through its tool into the database/needs feed.
+Physical microphone capture was not exercised by the automated smoke test. The browser's typed
+mode uses the same agent/tool route and has a regression test for persist-before-send ordering.

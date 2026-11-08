@@ -71,7 +71,7 @@ The current local demo keys were approved and configured on November 8, 2026, wi
 
 The dashboard from GitHub `main` (`a83428b`) is integrated with the voice backend.
 `./scripts/run-demo.sh` builds both interfaces. Open `/dashboard/`, then **Open voice caller**.
-The normal phone entry now uses dashboard context; `/?source=fixtures` explicitly selects the legacy demonstration instructions.
+The phone interface always uses dashboard context. The debug inspector links to the dashboard for zone management; the old synthetic-area editor and fixture-mode URL switch have been removed.
 
 The dashboard reads persisted calls, corrected transcripts, confirmed intake, background-job results,
 and steering acknowledgements from `/api/dashboard/snapshot` every second. Operator messages use
@@ -80,17 +80,28 @@ ElevenLabs. Call end is distinct from assistance resolution. No scripted callers
 or automatic dispatch acceptance are loaded by the connected dashboard.
 
 Publish instructions using **Publish area instruction**. These are durable, versioned records shared
-with the voice agent. The confirmed area name must match exactly (case-insensitive); ambiguous matches
-return unknown. Map polygons are visual reference, not geocoded boundary resolution. Publishing a new
+with the voice agent. Caller-confirmed place names are resolved to evidence-backed map references; published polygons
+are matched against those coordinates. Zones without a polygon use the confirmed area name. Ambiguous
+locations remain unresolved. Overlapping zones with identical action and instruction text share that guidance;
+conflicting instructions create a durable operator inbox request. Place references are approximate, not device GPS. Publishing a new
 version refreshes matching active dashboard calls and invalidates stale background analysis.
 
 Team facilities, incidents, and candidate routes are read live from `data/*.json` (override with
 `TEAM_DATA_DIR`). Those committed records currently describe **simulated** incidents/facilities/routes;
-integration does not turn them into verified real-world data. Calls without confirmed coordinates stay
-in the list and are not placed at invented map positions. Dashboard calls never use the synthetic vehicle
+integration does not turn them into verified real-world data. Calls with unresolved locations stay in the list without an invented map position. Place lookups use
+team coordinate records or cached Photon/OpenStreetMap results. Set `GEOCODING_ENABLED=0` for offline
+operation or `PHOTON_URL` for a different Photon service. Dashboard calls never use the synthetic vehicle
 fleet: optionally supply `data/resources.json` as an array of capacity records with `id`,
 `passenger_capacity`, `wheelchair_capacity`, and `simulated`. An absent file means no known vehicles.
 The old fixture scenarios retain their separate demo fleet.
+
+Cross streets such as `Pacific Beach Drive at Everts Street, Pacific Beach, San Diego` are
+matched to shared OpenStreetMap road nodes. The demo fetches a bounded street map extract
+(`GEOCODING_OSM_MAP_URL` overrides the endpoint), with size/time limits and a ten-minute road cache.
+Similar spellings produce a clarification request, never an automatic location correction.
+Failed location lookups are retried on recheck; resolved places retain their coordinate cache.
+The selected caller shows an explicit map notice while coordinates are pending or unresolved,
+and coordinates belonging to a previous location are rejected by the dashboard feed.
 
 Validation: backend integration tests cover snapshots, transcript corrections, persisted instructions,
 ambiguous areas, steering acknowledgements, and absence of fictional transport proposals. A real
@@ -103,3 +114,41 @@ For a repeatable isolated provider check, run the server with
 instruction for **Integration Test Area** containing **ORCHID**, then run
 `.venv/bin/python scripts/smoke_dashboard.py`. The sanitized result is `.runtime/smoke-dashboard.json`.
 Keep both local interfaces on the same backend. This integration does not introduce remote authentication.
+
+
+### Airport-call fixes and revalidation
+
+Ended-call durations use the recorded end time, and the dashboard distinguishes transport requests
+from unknown mobility needs. The conversation view has independent scrolling and optional backend
+activity. **Recheck location & zone** repeats the geographic lookup. On ended calls it adds map metadata
+and a separately labeled current instruction without changing the original transcript or instruction.
+
+New ElevenLabs calls use the updated conversational policy: pause intake for caller interruptions,
+accept explicit present-location statements, recheck after corrections or challenges to old guidance,
+and resume unanswered intake questions only after addressing the caller's concern. Assessment and
+instruction updates are forwarded as current backend context. Provider contextual updates are
+non-interrupting; delivery to context alone does not prove they have been spoken.
+
+`npm test --prefix frontend` covers durations, unknown facts, coordinate mapping, stable transcript
+corrections, and unchanged polling. `npm test --prefix web` covers stale context and changed facts.
+The real-provider `scripts/smoke_voice_flexibility.py` tests interruption, location correction, recheck,
+pause, and resume using typed inputs/generated audio; microphone ASR requires a separate spoken test.
+
+### Operator inbox
+
+Click **Inbox** in the dashboard header to see unread agent requests, the caller/agent transcript,
+and operator reply history. Replies use the existing live voice context channel, with separate
+queued and context-delivered states. Ended calls retain their history and cannot receive replies.
+Messages and read state persist in SQLite. The agent's `message_operator` tool returns a saved
+receipt; the prompt prohibits claiming an escalation succeeded without that receipt. Saving a
+message does not mean an operator read it or accepted an assistance request.
+
+Conflicting zones create one request per unresolved conflict. The operator can select a published
+instruction for that call directly in the inbox. The choice is invalidated by a changed location
+or conflicting zone version; the agent never chooses an order by severity or recency itself.
+
+After changes, rebuild both clients, restart the backend, refresh the phone page, and start a new
+call. `scripts/configure_elevenlabs.py --update-existing` attaches the inbox client tools to the
+recorded dedicated agent while preserving existing tools. `scripts/smoke_inbox.py --base-url
+http://127.0.0.1:8013` exercises the real provider on an isolated test backend, using typed inputs
+and generated audio. It must not be pointed at a real incident database.

@@ -222,8 +222,8 @@ class WebsiteSession:
         raise WebsiteError("website_redirect_limit")
 
 
-BLOCKS = {"p", "div", "section", "article", "li", "td", "tr", "address", "header", "footer", "h1", "h2", "h3", "br"}
-PHONE_TEXT = re.compile(r"(?<!\w)(?:\+?\d[\d()/ .\u00a0-]{6,}\d)(?:\s*(?:ext\.?|x|#|durchwahl)\s*\d{1,8})?", re.I)
+BLOCKS = {"p", "div", "section", "article", "li", "td", "tr", "address", "header", "footer", "h1", "h2", "h3"}
+PHONE_TEXT = re.compile(r"(?<!\w)(?:\+?\d[\d()/ .\u00a0–—‑-]{6,}\d)(?:\s*(?:ext\.?|x|#|durchwahl)\s*\d{1,8})?", re.I)
 LABEL = re.compile(r"\b(reception|front desk|welcome desk|switchboard|main (?:phone|line|number)|telefax|fax|emergency|notruf|notfall(?:nummer|telefon)?|phone|telephone|telefon(?:nummer|zentrale)?|tel|call|empfang|rezeption|zentrale|anmeldung|kontakt)\b", re.I)
 CONTACT_LINK = re.compile(r"contact|kontakt|impressum|about|über.uns|ueber.uns|location|standort", re.I)
 
@@ -253,6 +253,8 @@ class ContactParser(HTMLParser):
             return
         if tag in BLOCKS:
             self.flush()
+        if tag == "br":
+            self.parts.append("\n")
         if tag == "a":
             href = attrs.get("href", "")
             self.anchor = [href, []]
@@ -288,6 +290,10 @@ def extract_contacts(html, country):
     parser.close()
     found = []
     for block, tels in parser.blocks:
+        # Imprints often list the regulator's contact alongside the practice.
+        # Keep line-break context so these are not presented as facility phones.
+        if re.search(r"kassenärztliche vereinigung|ärztekammer|aufsichtsbehörde", block, re.I):
+            continue
         entries = [(raw, offset, "tel_link") for raw, offset in tels]
         entries.extend((match.group(), match.start(), "labeled_text") for match in PHONE_TEXT.finditer(block))
         for raw, offset, method in entries:
@@ -311,7 +317,7 @@ def extract_contacts(html, country):
     return found[:20], parser.links
 
 
-def enrich_leads(leads, country, *, max_websites=10, session=None):
+def enrich_leads(leads, country, *, max_websites=10, session=None, on_progress=None):
     """Mutate only missing-contact leads, retaining field-level source evidence."""
     session = session or WebsiteSession()
     attempted = enriched = 0
@@ -331,6 +337,8 @@ def enrich_leads(leads, country, *, max_websites=10, session=None):
             report["reason"] = "website_budget"
             continue
         attempted += 1
+        if on_progress:
+            on_progress({"kind": "website", "id": lead["lead_id"], "label": lead["name"], "status": "running"})
         deadline = session.clock() + 25
         try:
             initial = checked_url(lead["website"])
@@ -385,6 +393,8 @@ def enrich_leads(leads, country, *, max_websites=10, session=None):
             lead["phone_candidates"].sort(key=lambda p: {"reception": 0, "main": 1, "general": 2}.get(p.get("role"), 3))
         else:
             report["status"] = "failed" if report["errors"] else "no_phone_found"
+        if on_progress:
+            on_progress({"kind": "website", "id": lead["lead_id"], "label": lead["name"], "status": report["status"]})
     # Recompute conflicts and shared-switchboard flags after enrichment.
     leads[:] = merge_leads(leads)
     return {"websites_attempted": attempted, "leads_enriched": enriched, "http_requests": session.requests,

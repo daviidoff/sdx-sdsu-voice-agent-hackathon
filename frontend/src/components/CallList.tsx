@@ -1,13 +1,12 @@
-import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Accessibility, Phone } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { activeDispatch, etaMin } from '@/lib/dispatch'
-import { byPriority, elapsed, zoneFor } from '@/lib/geo'
+import { byPriority, callDuration, zoneFor } from '@/lib/geo'
 import { cn } from '@/lib/utils'
 import type { Call, Dispatch, Facility, Responder, Selection, TranscriptLine, Zone } from '@/types'
-import { CREW_KIND, CREW_STATUS, SITUATION, STATUS } from './labels'
+import { CREW_KIND, CREW_STATUS, SITUATION, STATUS, situationLabel } from './labels'
 
 export function CallList({
   calls,
@@ -19,7 +18,9 @@ export function CallList({
   selection,
   onSelect,
   now,
+  tab, onTabChange, contactsContent,
 }: {
+  tab: string; onTabChange: (tab: string) => void; contactsContent?: ReactNode
   calls: Call[]
   facilities: Facility[]
   lines: Record<string, TranscriptLine[]>
@@ -30,27 +31,21 @@ export function CallList({
   onSelect: (s: Selection) => void
   now: number
 }) {
-  const [tab, setTab] = useState('calls')
-  // Follow the map: clicking a crew there opens the Crews tab, clicking a caller opens Calls.
-  useEffect(() => {
-    if (selection?.kind === 'crew') setTab('crews')
-    if (selection?.kind === 'call') setTab('calls')
-  }, [selection?.kind, selection?.id])
-
   const sorted = [...calls].sort(byPriority)
   const busy = dispatches.filter((d) => d.status !== 'done').length
   return (
-    <Tabs value={tab} onValueChange={setTab} className="flex h-full min-h-0 flex-col gap-0">
+    <Tabs value={tab} onValueChange={onTabChange} className="flex h-full min-h-0 flex-col gap-0">
       <div className="border-b px-3 py-2">
         <TabsList className="w-full">
-          <TabsTrigger value="calls">Calls ({calls.filter((c) => c.status !== 'resolved' && c.status !== 'ended').length})</TabsTrigger>
+          <TabsTrigger value="calls">Calls ({calls.length})</TabsTrigger>
           <TabsTrigger value="crews">Crews ({busy}/{responders.length})</TabsTrigger>
           <TabsTrigger value="contacts">Contacts</TabsTrigger>
         </TabsList>
       </div>
-      <TabsContent value="calls" className="min-h-0 flex-1">
-        <ScrollArea className="h-full">
-          <div className="flex flex-col gap-2 p-3">
+      <TabsContent value="calls" className="min-h-0 min-w-0 flex-1">
+        <div className="h-full min-w-0 overflow-x-hidden overflow-y-auto">
+          <div className="flex min-w-0 flex-col gap-2 p-3">
+            <p className="text-xs text-muted-foreground">{calls.filter((c) => c.status !== 'resolved' && c.status !== 'ended').length} active · {calls.filter((c) => c.status === 'resolved' || c.status === 'ended').length} ended</p>
             {!sorted.length && <p className="p-3 text-sm text-muted-foreground">No calls yet. Open the voice caller to begin.</p>}
             {sorted.map((c) => {
               const last = lines[c.id]?.findLast((l) => l.speaker === 'caller' || l.speaker === 'agent')
@@ -61,9 +56,9 @@ export function CallList({
                   key={c.id}
                   onClick={() => onSelect({ kind: 'call', id: c.id })}
                   className={cn(
-                    'rounded-lg border bg-card p-3 text-left transition hover:bg-muted/60',
+                    'w-full min-w-0 rounded-lg border bg-card p-3 text-left transition hover:bg-muted/60',
                     selection?.kind === 'call' && selection.id === c.id && 'border-foreground/40 ring-2 ring-foreground/10',
-                    c.status === 'resolved' && 'opacity-60',
+                    (c.status === 'resolved' || c.status === 'ended') && 'border-dashed',
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -71,12 +66,12 @@ export function CallList({
                       <div className="truncate text-sm font-medium">{c.callerName}</div>
                       <div className="truncate text-xs text-muted-foreground">{c.address} · {c.people ?? 'Unknown'} {c.people === 1 ? 'person' : 'people'}</div>
                     </div>
-                    <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">{elapsed(c.startedAt, now)}</span>
+                    <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">{callDuration(c, now)}</span>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <Badge className={SITUATION[c.situation].badge}>{SITUATION[c.situation].label}</Badge>
+                    <Badge className={SITUATION[c.situation].badge}>{situationLabel(c)}</Badge>
                     <Badge variant="outline">{STATUS[c.status]}</Badge>
-                    {zone && <Badge variant="secondary">Zone {zone.id}</Badge>}
+                    {zone && <Badge variant="secondary">{zone.label}</Badge>}
                     {c.status === 'active' && <span className="ml-auto size-2 animate-pulse rounded-full bg-red-500" title="Live" />}
                   </div>
                   {crew && (
@@ -89,10 +84,10 @@ export function CallList({
               )
             })}
           </div>
-        </ScrollArea>
+        </div>
       </TabsContent>
-      <TabsContent value="crews" className="min-h-0 flex-1">
-        <ScrollArea className="h-full">
+      <TabsContent value="crews" className="min-h-0 min-w-0 flex-1">
+        <div className="h-full min-w-0 overflow-x-hidden overflow-y-auto">
           <div className="flex flex-col gap-2 p-3">
             <p className="text-xs text-muted-foreground">No live crew or dispatch service is connected. Assistance remains unconfirmed.</p>
             {responders.map((r) => {
@@ -102,7 +97,7 @@ export function CallList({
                   key={r.id}
                   onClick={() => onSelect({ kind: 'crew', id: r.id })}
                   className={cn(
-                    'rounded-lg border bg-card p-3 text-left transition hover:bg-muted/60',
+                    'w-full min-w-0 rounded-lg border bg-card p-3 text-left transition hover:bg-muted/60',
                     selection?.kind === 'crew' && selection.id === r.id && 'border-foreground/40 ring-2 ring-foreground/10',
                   )}
                 >
@@ -127,27 +122,29 @@ export function CallList({
               )
             })}
           </div>
-        </ScrollArea>
+        </div>
       </TabsContent>
-      <TabsContent value="contacts" className="min-h-0 flex-1">
-        <ScrollArea className="h-full">
+      <TabsContent value="contacts" className="min-h-0 min-w-0 flex-1">
+        {contactsContent ?? <>
+        <div className="h-full min-w-0 overflow-x-hidden overflow-y-auto">
           <div className="flex flex-col gap-2 p-3">
-            <p className="text-xs text-muted-foreground">Shared team records. Availability and contact details require confirmation.</p>
+            <p className="text-xs text-muted-foreground">Team records and discovered facilities. Select a contact to inspect numbers and sources. Availability remains unconfirmed.</p>
             {facilities.map((f) => {
               const zone = f.position && zoneFor(f.position, zones)
               return (
-                <div key={f.id} className="rounded-lg border bg-card p-3">
+                <button key={f.id} onClick={() => onSelect({ kind: 'facility', id: f.id })} className={cn("rounded-lg border bg-card p-3 text-left hover:bg-muted/60", selection?.id === f.id && "border-blue-600 ring-1 ring-blue-600")}>
                   <div className="text-sm font-medium">{f.name} {f.simulated && <Badge variant="outline">Demonstration record</Badge>}</div>
                   <div className="text-xs text-muted-foreground">{f.type.replaceAll('_', ' ')}{f.area ? ` · ${f.area}` : ''}{f.mobilitySupport ? ` · ${f.mobilitySupport.replaceAll('_', ' ')}` : ''}</div>
                   <div className="mt-1.5 flex items-center gap-1.5 text-xs">
-                    <Phone className="size-3" /> {f.contact}
-                    {zone && <Badge variant="secondary" className="ml-auto">Zone {zone.id}</Badge>}
+                    <Phone className="size-3" /> {f.contact || (f.discovery?.phone_candidates.length ? 'Multiple candidates · review' : 'Phone not found')}
+                    {zone && <Badge variant="secondary" className="ml-auto">{zone.label}</Badge>}
                   </div>
-                </div>
+                </button>
               )
             })}
           </div>
-        </ScrollArea>
+        </div>
+              </>}
       </TabsContent>
     </Tabs>
   )

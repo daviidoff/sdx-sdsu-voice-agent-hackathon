@@ -189,3 +189,48 @@ class EnrichmentTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class GermanAndTransportRegressionTests(unittest.TestCase):
+    def test_german_formats_labels_and_exclusions(self):
+        from disaster_crawler.normalize import phone_candidate
+        for raw in ['030 / 449 60 62', '030–4496062', '+49 (0)30 4496062', '0049 (0)30 4496062']:
+            self.assertEqual(phone_candidate(raw, 'DE')['number'], '+49304496062')
+        self.assertIsNone(phone_candidate('112', 'DE'))
+        self.assertIsNone(phone_candidate('0304496062', 'US'))
+        phones, _ = extract_contacts('<p>Anmeldung: 030 / 449 60 62<br>Telefax: 030 / 449 60 63</p>'
+                                     '<p>Zentrale: 030 – 4496064</p><p>Notfalltelefon: 0304496065</p>', 'DE')
+        self.assertEqual([(p['number'], p['role']) for p in phones], [('+49304496062', 'reception'), ('+49304496064', 'main')])
+
+    def test_regulator_phone_in_imprint_is_not_facility_phone(self):
+        phones, _ = extract_contacts('<p>Kassenärztliche Vereinigung Berlin<br>Masurenallee 6<br>Tel.: 030 / 31003-0</p>'
+                                     '<p>Telefon: 030 / 4642003</p>', 'DE')
+        self.assertEqual([p['number'] for p in phones], ['+49304642003'])
+
+    def test_german_contact_link(self):
+        records = leads()[:1]
+        session = FakeSession({'https://facility.example.org/': (200, '<a href="/kontakt">Kontakt</a>', {}),
+                               'https://facility.example.org/kontakt': (200, '<p>Empfang: 030 / 4496062</p>', {})})
+        enrich_leads(records, 'DE', session=session)
+        self.assertEqual(records[0]['phone']['number'], '+49304496062')
+        self.assertEqual(records[0]['phone']['source_url'], 'https://facility.example.org/kontakt')
+
+    def test_https_host_and_final_read_closed_socket(self):
+        from disaster_crawler.website import fetch_once
+        from unittest.mock import MagicMock
+        sock = MagicMock()
+        response = MagicMock(status=200)
+        response.getheaders.return_value = [('Content-Type', 'text/html'), ('Content-Length', '5')]
+        response.headers.get_content_charset.return_value = 'utf-8'
+        response.isclosed.side_effect = [False, True]
+        response.read1.return_value = 'hello'.encode()
+        conn = MagicMock(); conn.getresponse.return_value = response
+        context = MagicMock(); context.wrap_socket.return_value = sock
+        with patch('disaster_crawler.website.public_addresses', return_value=['93.184.216.34']), \
+             patch('disaster_crawler.website.socket.create_connection', return_value=sock), \
+             patch('disaster_crawler.website.tls_context', return_value=context), \
+             patch('disaster_crawler.website.http.client.HTTPConnection', return_value=conn):
+            import time
+            self.assertEqual(fetch_once('https://facility.example.org/', time.monotonic()+25).body, 'hello')
+        self.assertEqual(conn.request.call_args.kwargs['headers']['Host'], 'facility.example.org')
+        self.assertEqual(sock.settimeout.call_count, 1)
+        context.wrap_socket.assert_called_once_with(sock, server_hostname='facility.example.org')

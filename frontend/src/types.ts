@@ -19,16 +19,39 @@ export interface Call {
   callerName: string
   phone: string
   address: string
+  locationQuery?: string
   position?: LatLng
   people: number | null
   situation: Situation
   mobility: string
   status: CallStatus
   startedAt: number
+  endedAt?: number
+  transportNeeded?: boolean
+  canEvacuate?: boolean
   instruction?: { zone_id?: string; text?: string; version?: number; source?: string }
+  currentSpatialInstruction?: { zone_id?: string; text?: string; version?: number; source?: string }
+  locationResolution?: { status: string; query?: string; message?: string; display_name?: string; source?: string; source_url?: string; precision?: string; resolved_at?: string }
   mode?: string
   wheelchairUsers?: number
   scenarioId?: string
+}
+
+export interface DiscoveredPhone {
+  number: string
+  extension?: string
+  raw?: string
+  role?: string
+  source_url?: string
+}
+export interface DiscoveryDetails {
+  phone_candidates: DiscoveredPhone[]
+  website?: string
+  source_url?: string
+  flags: string[]
+  review_status: string
+  evidence: { evidence_id: string; source: string; source_url?: string; retrieved_at: string; excerpt?: string; observed?: { osm_tags?: Record<string, string> } }[]
+  website_enrichment?: { status: string; reason?: string; errors: { url: string; code: string }[] }
 }
 
 export interface Facility {
@@ -42,7 +65,13 @@ export interface Facility {
   mobilitySupport?: string
   simulated?: boolean
   accessible?: boolean
+  address?: string
+  discovery?: DiscoveryDetails
+  incidentId?: string
+  updatedAt?: string
+  runId?: string
 }
+
 
 export interface Responder {
   id: string
@@ -74,7 +103,7 @@ export interface Dispatch {
   radio: TranscriptLine[] // agent ↔ crew call
 }
 
-export type Selection = { kind: 'call' | 'crew' | 'zone'; id: string }
+export type Selection = { kind: 'call' | 'crew' | 'zone' | 'facility'; id: string }
 
 export interface Zone {
   id: string

@@ -10,9 +10,50 @@ refreshes every second and shows connection errors without silently switching to
 Operator messages are queued by the backend and delivered by the active phone window. Published
 area instructions are versioned and persisted. See `../docs/demo-api.md` for the contract.
 
-Facilities, incidents, and candidate routes come from the team's shared `data/` records. Existing
+Facilities combine the team's shared `data/` records with persisted crawler discoveries. Incidents and candidate routes still come from the shared records. Existing
 records are labeled demonstrations. Unknown caller coordinates remain absent from the map.
 There is no connected crew dispatch service. `src/data/fake.ts` remains historical demo source and is
 not imported by the live dashboard.
 
 Validation: `npm run build`, `npm run lint`, and the root Python dashboard integration tests.
+
+Crawler reports can be uploaded with **Import crawler results** or published directly by the worker
+using `--publish-url http://127.0.0.1:8000`. Click a map marker or Contacts entry to inspect
+phone candidates, address, exact source pages, timestamps, and review flags. **Show discovered
+facilities** fits the newest imported area. Discovery records remain unverified and do not trigger calls.
+The backend uses the existing SQLite database, not Supabase. See `../crawler/README.md` for commands.
+
+Draw a zone with **Instruction Zone**, then click or tap the map to add polygon corners.
+Use **Undo** to remove the last corner. After at least three corners, choose **Finish** or click
+the first point to close the polygon. **Cancel** or Escape discards the drawing. Finishing opens
+an unpublished zone draft; add the operator instruction and publish when ready.
+
+## San Diego contact workflow
+
+Open **Contacts → Search**, draw a polygon (the same Leaflet drawing control used for response
+zones), choose live OSM/web research or offline San Diego fixtures, and start the search. The
+contact boundary is visible only in Contacts and never publishes an evacuation instruction.
+Search jobs and each search/website worker persist their status. Results are filtered to the
+actual polygon. Berlin remains a saved validation example and is excluded from this incident view.
+
+Under **Contacts → Contacts**, inspect a facility's sources and select its phone candidate.
+**Approve mock call** queues an operator-approved simulation. **Act as receiver** opens an incoming
+mock call with microphone or typed reception role-play using the dedicated ElevenLabs outreach
+agent. **Run scripted mock** exercises the workflow offline with clearly labeled scripted dialogue;
+bulk approval runs at most three scripted conversations concurrently. Nothing dials a real number.
+
+**Reports** shows who reported what, the source conversation, timestamps, quotes and assistance
+needs. Reception self-confirmation and operator verification are distinct. Needs remain for review;
+there are no dispatch commitments or extra people/need markers on the map. Correcting a report
+preserves its history and invalidates its old verification. The structured downstream feed is
+`GET /api/contacts/needs`, also included as `reported_needs` in the shared dashboard/voice context (all current reports are explicitly `mock: true`).
+
+Run `.venv/bin/python scripts/configure_outreach.py` once with the existing ElevenLabs API key.
+This provisions a separate reception agent, preserving the inbound agent. Its IDs are saved in
+`.runtime/outreach-agent.json`; alternatively set `ELEVENLABS_OUTREACH_AGENT_ID`. Never put keys in
+frontend variables. Start/restart the backend to load new routes, then rebuild the frontend.
+
+Validation: `tests/test_contacts.py`, `frontend/tests/contacts.test.mjs`, and
+`.venv/bin/python scripts/smoke_contacts.py --base-url http://127.0.0.1:8002`. The last command uses
+real ElevenLabs speech output and a typed, explicitly mock receptionist; it does not validate
+physical microphone capture. Run an offline contact search before this smoke check.

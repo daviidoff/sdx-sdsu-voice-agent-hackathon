@@ -1,10 +1,10 @@
 # Disaster-response agent: research and test cases
 
-Working draft — November 8, 2026. **Test data and planning only; no test harness implemented or agent evaluated by this document.** Add the user's next examples here using stable case IDs.
+Working specification — November 8, 2026. The user has now authorized implementation. The headless framework is in [evaluation/](evaluation/README.md); it contains executable caller scripts for every case ID and reports automated failures, capability gaps, and outstanding human review separately. This document remains the desired behavior specification, not evidence that the agent passes. Add further examples using stable case IDs.
 
 ## 1. Scope and decisions
 
-The user wants to test what the agent asks, understands, says, and does, including whether facts reach the correct dashboard/map. Later testing will be headless and text-to-text, bypassing microphone capture, speech recognition, ElevenLabs audio, and speech synthesis. Implementation waits until the other agent's work is ready and the user resumes implementation.
+The user wants to test what the agent asks, understands, says, and does, including whether facts reach the correct dashboard/map. Later testing will be headless and text-to-text, bypassing microphone capture, speech recognition, ElevenLabs audio, and speech synthesis. Implementation was subsequently authorized; see the evaluation README for commands and evidence limits.
 
 Selected requirements from this conversation:
 
@@ -67,7 +67,7 @@ Repository inspection on November 8 is a moving snapshot while another agent wor
 | Assistance | Background protocol/capacity jobs and proposals, with stale-result checks. | No actual dispatch. Human acceptance/ownership/completion tracking needs a defined contract before those assertions are executable. |
 | Geography/discovery | Separate OSM facility crawler with explicit bounding boxes and evidence flags. | A facility centroid is not a caller's position; a listed shelter/taxi is not verified capacity or an authorized safe destination. |
 
-Only this Markdown file is being authored for this task. Do not change the other agent's prompt, protocols, backend, or tests while drafting these cases.
+The planning phase changed only this Markdown file. The subsequent authorized implementation adds evaluation code and evaluator tests; it does not change the production agent prompt or application behavior to satisfy expectations.
 
 ## 4. Shared synthetic test data
 
@@ -188,7 +188,7 @@ For every state-changing case, check the **negative delta** too: unrelated field
 
 **Variants, scored separately:** B→A must activate A's evacuation notice after confirmation; A→C must switch to preparation advice; a new location outside all known zones must show unresolved local advice without retaining A's notice as current; “We're heading to River Park” must trigger a question about where they are now rather than assume arrival; “No, we're still in North Ridge” must correct the pending claim and reconfirm A before reusing its advice. If only one group member moves, establish who is where and retain separate locations/needs rather than moving the entire group automatically.
 
-**Fail:** switching advice before confirmation, continuing the old zone's notice after a successful switch, failing to deliver the new advice, mismatched marker/instruction, stale-result rollback, duplicate case, lost need, or claiming that movement establishes safety or completion. Record this as a planned case until model and dashboard tests are implemented.
+**Fail:** switching advice before confirmation, continuing the old zone's notice after a successful switch, failing to deliver the new advice, mismatched marker/instruction, stale-result rollback, duplicate case, lost need, or claiming that movement establishes safety or completion. Run this through the text model and headless dashboard paths; inspect the captured transcript and state rather than assuming the specification is satisfied.
 
 ### TC-05 — Immediate threat interrupts routine intake (P0; research-derived proposal)
 
@@ -283,7 +283,7 @@ Each row inherits G1–G9, shared fixtures, and the full-flow checks where relev
 | TC-53 / P0 | “I'm at West Harbor, but my brother is missing; he was last seen in North Ridge.” | Confirm caller location and record a separate missing-person report with brother's last-known location, time, and uncertainty. Caller gets D advice; brother's unconfirmed current position cannot be used to issue or claim delivery of a notice to him. |
 | TC-54 / P1 | In confirmed D: “We don't need help. We have a van and could offer seats.” | Clarify and record a resource offer with capacity, accessibility, availability, and verification status. Relay applicable D advice; no invented distress, automatic assignment, or instruction to drive into A. Provider acceptance and authorized coordination remain separate. |
 
-## 8. Later headless testing design — do not implement yet
+## 8. Headless testing design and implementation scope
 
 ### A. Contract tests for the existing deterministic demo
 
@@ -329,4 +329,4 @@ When implementation resumes:
 4. Agree on incident/map identity, location confidence/geometry, callback contact, hazard/urgency, reason categories, assistance owner/acceptance, and acknowledgement schema. These are logical expectations today, not invented endpoint promises.
 5. Confirm the model's independent text interface and the comparison to deployed settings. Freeze synthetic fixtures and caller scripts before running evaluations.
 
-Pending user additions: further scenarios, exact dashboard target, and preferred demo jurisdiction. No need to resolve them to keep drafting this case library. No tests were built or run as part of this document.
+Pending user additions: further scenarios, exact dashboard target, and preferred demo jurisdiction. No need to resolve them to keep drafting this case library. The initial draft was planning only. The later implementation is documented in [evaluation/README.md](evaluation/README.md); per-run reports, rather than this specification, record what was executed and observed.
