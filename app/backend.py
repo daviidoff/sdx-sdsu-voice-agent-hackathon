@@ -18,6 +18,7 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, model_validator
+from app.fires import SimulatedFire, fires
 from app.dashboard import DashboardZone, team_context, transport_resources, zones, instruction_for
 from app.geography import initialize as initialize_geography, resolve_place
 from app.discovery import initialize as initialize_discovery, router as discovery_router
@@ -82,7 +83,7 @@ class InstructionInput(BaseModel):
 
 
 class SteeringAcknowledgement(BaseModel):
-    status: Literal["context_delivered"] = "context_delivered"
+    status: Literal["context_delivered", "response_requested"] = "context_delivered"
 
 
 class OperatorMessage(TextInput):
@@ -117,6 +118,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         db.row_factory = sqlite3.Row
         db.executescript("""
             PRAGMA journal_mode=WAL;
+            CREATE TABLE IF NOT EXISTS simulated_fires (id TEXT PRIMARY KEY, data TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS dashboard_zones (id TEXT PRIMARY KEY, data TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS calls (id TEXT PRIMARY KEY, data TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS instructions (zone_id TEXT PRIMARY KEY, data TEXT NOT NULL);
@@ -307,7 +309,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         return current["instruction"]
 
     def launch_job(call):
-        if call["status"] == "ended" or not (call["assessment"].get("transport_needed") or call["assessment"].get("can_evacuate") is False):
+        if call.get("pending_location") or call["status"] == "ended" or not (call["assessment"].get("transport_needed") or call["assessment"].get("can_evacuate") is False):
             return
         signature = json.dumps([call["assessment"], call["instruction"]], sort_keys=True)
         if call.get("last_job_signature") == signature:
@@ -535,9 +537,44 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         launch_job(call)
         return full(call_id)
 
+    @api.post("/api/calls/{call_id}/location-proposal")
+    async def propose_location(call_id: str, body: Location):
+        call = read_call(call_id, writable=True)
+        location = body.location.strip()
+        if not location:
+            raise HTTPException(422, "Location is empty")
+        if call.get("pending_location") == location:
+            return full(call_id)
+        # A reported move invalidates old guidance immediately, before geocoding.
+        # Historical assessment/instruction events retain the previous position.
+        call["pending_location"] = location
+        call["assessment"]["location"] = None
+        call["assessment"].pop("location_resolution", None)
+        call["assessment"].pop("location_confirmed_at", None)
+        call.pop("operator_instruction", None)
+        call.pop("zone_conflict_request", None)
+        call["instruction"] = None
+        call["revision"] += 1
+        proposed = event(call_id, "location.proposed", {"location": location, "confirmation_required": True})
+        call["location_proposal_event_id"] = proposed["id"]
+        save(call)
+        event(call_id, "assessment.updated", call["assessment"])
+        event(call_id, "instruction.updated", None)
+        return full(call_id)
+
     @api.post("/api/calls/{call_id}/resolve")
     async def resolve_location(call_id: str, body: Location):
         call = read_call(call_id, writable=True)
+        pending = call.get("pending_location")
+        if pending and pending.casefold().strip() != body.location.casefold().strip():
+            raise HTTPException(409, "Confirm the pending location or propose the corrected place first")
+        if pending:
+            proposal_id = call.get("location_proposal_event_id")
+            if proposal_id and not any(e["type"] == "transcript" and e["payload"].get("role") == "user" and e["payload"].get("text", "").strip() for e in events(call_id, int(proposal_id))):
+                raise HTTPException(409, "Wait for the caller's next turn after the location read-back")
+            call.pop("pending_location")
+            call.pop("location_proposal_event_id", None)
+            save(call)
         result = await locate_dashboard(call_id, body.location) if call["scenario_id"] == "dashboard" else resolve(call, body.location)
         launch_job(read_call(call_id))
         return {**result, "dashboard_context": team_context(db())} if call["scenario_id"] == "dashboard" else result
@@ -616,7 +653,10 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         queued = next((item for item in call_events if item["type"] == "steering.queued" and (item["id"] == event_id or item["payload"].get("id") == event_id)), None)
         if queued is None:
             raise HTTPException(404, "Steering event not found")
-        if not any(item["type"] == "steering.acknowledged" and item["payload"].get("event_id") == queued["id"] for item in call_events):
+        ranks = {"context_delivered": 1, "response_requested": 2}
+        previous = max((ranks.get(item["payload"].get("status"), 0) for item in call_events
+                        if item["type"] == "steering.acknowledged" and item["payload"].get("event_id") == queued["id"]), default=0)
+        if ranks[body.status] > previous:
             event(call_id, "steering.acknowledged", {"event_id": queued["id"], "status": body.status, "simulation": True})
         return full(call_id)
 
@@ -671,7 +711,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     @api.get("/api/dashboard/snapshot")
     async def dashboard_snapshot():
         return {"calls": [full(row["id"]) for row in db().execute("SELECT id FROM calls ORDER BY rowid DESC")],
-                "zones": zones(db()), **team_context(db()), "contact_workflow": contact_overview(db()), "source": "voice-backend", "updated_at": now()}
+                "zones": zones(db()), "fires": fires(db()), **team_context(db()), "contact_workflow": contact_overview(db()), "source": "voice-backend", "updated_at": now()}
 
     @api.post("/api/dashboard/calls/{call_id}/geolocate")
     async def refresh_call_location(call_id: str):
@@ -687,6 +727,21 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     async def dashboard_context():
         return {**team_context(db()), "zones": zones(db()),
                 "notice": "Records retain their source and simulation labels. Candidate routes are not approved travel instructions; facility listings do not confirm availability."}
+
+    @api.post("/api/dashboard/fires")
+    async def save_fire(body: SimulatedFire):
+        fire = {**body.model_dump(), "updated_at": now()}
+        db().execute("INSERT OR REPLACE INTO simulated_fires VALUES (?, ?)", (body.id, json.dumps(fire)))
+        db().commit()
+        return fire
+
+    @api.delete("/api/dashboard/fires/{fire_id}")
+    async def delete_fire(fire_id: str):
+        deleted = db().execute("DELETE FROM simulated_fires WHERE id = ?", (fire_id,))
+        db().commit()
+        if deleted.rowcount == 0:
+            raise HTTPException(404, "Simulated fire not found")
+        return {"deleted": fire_id}
 
     @api.post("/api/dashboard/zones")
     async def publish_zone(body: DashboardZone):

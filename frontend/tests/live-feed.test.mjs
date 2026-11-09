@@ -60,6 +60,16 @@ test('corrected location removes stale pin and a resolved update moves it', () =
   assert.equal(toCall(rawCall({ assessment: { location: 'Pacific Beach', location_resolution: { ...next, status: 'pending' } } })).position, undefined)
 })
 
+test('reported movement is visible but never plotted before confirmation', () => {
+  const call = toCall(rawCall({status:'active',pending_location:'River Park',instruction:null,
+    assessment:{location:null,people_count:2,transport_needed:true}}))
+  assert.equal(call.address,'Confirmation pending: River Park')
+  assert.equal(call.position,undefined)
+  assert.equal(call.instruction,null)
+  assert.equal(call.people,2)
+  assert.equal(call.transportNeeded,true)
+})
+
 test('transcript corrections keep stable IDs and do not append correction notifications', () => {
   const original = { id: '10', call_id: 'airport-call', type: 'transcript', payload: { role: 'agent', text: 'Please wait.' }, created_at: '2026-11-08T22:51:30Z' }
   const lines = toLines(rawCall({ events: [original] }))

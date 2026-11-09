@@ -34,18 +34,28 @@ class Dashboard:
         call = snapshot
         short = call['id'][:8]
         card = self.page.get_by_role('button').filter(has_text='Voice · '+short).first
-        location = call['assessment'].get('location') or 'Location not confirmed'
+        location = 'Confirmation pending: '+call['pending_location'] if call.get('pending_location') else call['assessment'].get('location') or 'Location not confirmed'
         instruction = (call.get('instruction') or {}).get('text')
         render_error = None
         try:
-            self.page.get_by_role('tab',name=re.compile(r'^Calls')).click(timeout=5000)
+            navigation = self.page.get_by_role('navigation',name='Workspace')
+            if navigation.count():
+                calls = navigation.get_by_role('button',name=re.compile(r'^Calls',re.I))
+                if calls.get_attribute('aria-pressed') != 'true':
+                    calls.click(timeout=5000)
+            else:
+                self.page.get_by_role('tab',name=re.compile(r'^Calls')).click(timeout=5000)
             card.wait_for(timeout=5000)
             card.click(timeout=5000)
-            self.page.wait_for_function('([location, instruction]) => { const a=document.querySelectorAll("aside"); const t=a[a.length-1]?.innerText || ""; return t.includes(location) && (!instruction || t.includes(instruction)); }',
+            details = self.page.get_by_role('button',name='Details',exact=True)
+            if details.count() and details.get_attribute('aria-expanded') == 'false':
+                details.click(timeout=5000)
+            self.page.wait_for_function('([location, instruction]) => { const a=document.querySelectorAll("aside"); const panel=document.querySelector(\'[aria-label="Call details panel"]\') || a[a.length-1]; const t=panel?.innerText || ""; return t.includes(location) && (!instruction || t.includes(instruction)); }',
                                         arg=[location,instruction], timeout=5000)
         except Exception as exc:
             render_error = type(exc).__name__+': dashboard did not converge to current location/instruction'
-        detail = self.page.locator('aside').last.inner_text(timeout=5000)
+        panel = self.page.get_by_role('region',name='Call details panel')
+        detail = (panel if panel.count() else self.page.locator('aside').last).inner_text(timeout=5000)
         # Leaflet renders CircleMarker geometry as SVG paths containing arc commands.
         expected_markers = sum(c['assessment'].get('location_resolution',{}).get('status')=='resolved' for c in self.sandbox.snapshot()['calls'])
         # The selected call may not change when another call is added. Wait for
@@ -54,10 +64,42 @@ class Dashboard:
             self.page.wait_for_function(r'n => [...document.querySelectorAll(".leaflet-overlay-pane path")].filter(e => /a\d+(?:\.\d+)?,\d/.test(e.getAttribute("d") || "")).length === n',arg=expected_markers,timeout=5000)
         except Exception:
             pass
+        # flyTo animates for 0.6s. Wait for stable rendered geometry, rather than
+        # capturing a marker and polygons in different animation frames.
+        settled = self.page.evaluate('''() => new Promise(resolve => {
+          const start=performance.now(); let last='',changed=start;
+          const tick=() => {
+            const now=performance.now();
+            const nodes=[...document.querySelectorAll('.leaflet-map-pane,.leaflet-overlay-pane path')];
+            const current=JSON.stringify(nodes.map(e=>[e.getAttribute('d'),e.getAttribute('style'),e.getBoundingClientRect().x,e.getBoundingClientRect().y]));
+            if(current!==last){last=current;changed=now;}
+            if(now-start>650 && now-changed>250) return resolve(true);
+            if(now-start>4000) return resolve(false);
+            requestAnimationFrame(tick);
+          }; requestAnimationFrame(tick);
+        })''')
         paths = self.page.locator('.leaflet-overlay-pane path').evaluate_all(r'(els) => els.map(e => e.getAttribute("d")).filter(d => /a\d+(?:\.\d+)?,\d/.test(d || ""))')
+        map_box = self.page.locator('.leaflet-container').bounding_box()
+        map_visible = bool(map_box and map_box['width'] >= 200 and map_box['height'] >= 200 and self.page.locator('.leaflet-container').is_visible())
+        # Synthetic place markers use independent Leaflet Marker rendering. The
+        # selected caller's CircleMarker must coincide with the named fixture,
+        # not just exist somewhere in the SVG.
+        from evaluation.backend import LOCATIONS
+        query = call['assessment'].get('location') or ''
+        fixture = next((name for name in LOCATIONS if query==name or query.startswith(name+',') or query.startswith(name+' in ')),None)
+        marker_geometry = self.page.evaluate(r'''name => {
+          if(!name) return null;
+          const place=[...document.querySelectorAll('.leaflet-marker-icon')].find(e=>e.getAttribute('title')===name);
+          const caller=[...document.querySelectorAll('.leaflet-overlay-pane path')].find(e=>e.getAttribute('stroke')==='#0f172a' && /a\d+(?:\.\d+)?,\d/.test(e.getAttribute('d')||''));
+          if(!place||!caller) return {matches:false,reason:'Expected place or selected caller marker missing'};
+          const a=place.getBoundingClientRect(),b=caller.getBoundingClientRect();
+          const distance=Math.hypot(a.x+a.width/2-b.x-b.width/2,a.y+a.height/2-b.y-b.height/2);
+          return {matches:distance<=3,pixel_distance:distance};
+        }''',fixture)
         result = {'detail':detail, 'circle_paths':paths, 'expected_marker_count':expected_markers,
+                  'map_visible':map_visible, 'map_box':map_box,'map_settled':settled,'marker_geometry':marker_geometry,
                   'marker_count_matches':len(paths)==expected_markers, 'page_errors':list(self.errors), 'render_error':render_error,
-                  'scope':'Rendered dashboard, matching current text and circle count; geometry screenshots retained for review. Not an independent geographic-accuracy proof.'}
+                  'scope':'Rendered dashboard, current text, visible map, circle count and selected caller alignment with named synthetic place marker. Does not verify real-world geocoding.'}
         if screenshot:
             self.page.screenshot(path=str(screenshot), full_page=True)
         return result

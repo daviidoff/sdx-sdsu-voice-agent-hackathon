@@ -22,6 +22,19 @@ def start(client, **kwargs):
     return response.json()
 
 
+def test_steering_response_request_ack_upgrades_without_claiming_spoken(client):
+    call = start(client, mode="elevenlabs")
+    base = f"/api/calls/{call['id']}"
+    queued = client.post(base + '/steering', json={'text': 'Please wait here.'}).json()['events'][-1]
+    path = base + f"/steering/{queued['id']}/ack"
+    for status in ['context_delivered', 'response_requested', 'response_requested', 'context_delivered']:
+        response = client.post(path, json={'status': status})
+        assert response.status_code == 200
+    acknowledgements = [e['payload']['status'] for e in response.json()['events'] if e['type'] == 'steering.acknowledged']
+    assert acknowledgements == ['context_delivered', 'response_requested']
+    assert client.post(path, json={'status': 'spoken'}).status_code == 422
+
+
 def test_location_required_before_guidance(client):
     call = start(client)
     assert call["instruction"] is None

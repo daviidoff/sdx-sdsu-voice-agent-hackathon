@@ -29,7 +29,7 @@ export async function fetchRoute(from: LatLng, to: LatLng): Promise<{ path: LatL
   } catch {
     // network or server problem: use the fallback below
   }
-  return { path: [from, to], durationSec: (distanceKm(from, to) / 35) * 3600 + 60, routeText: 'direct route (offline estimate)' }
+  return { path: [from, to], durationSec: (distanceKm(from, to) / 35) * 3600 + 60, routeText: 'straight-line simulation (roads unavailable)' }
 }
 
 /** Where along the path the vehicle is, for a fraction 0..1 of the trip. */
@@ -64,7 +64,7 @@ export function activeDispatch(dispatches: Dispatch[], crewId: string): Dispatch
 
 export function crewPosition(r: Responder, dispatches: Dispatch[], now: number): LatLng {
   const d = activeDispatch(dispatches, r.id)
-  return d && d.route.length ? pointAlong(d.route, tripFraction(d, now)) : r.position
+  return d && d.route.length ? pointAlong(d.route, tripFraction(d, now)) : r.patrol ? pointAlong(r.patrol.path, ((Math.max(0, now - r.patrol.startedAt) / 1000) % r.patrol.durationSec) / r.patrol.durationSec) : r.position
 }
 
 export const needsWheelchair = (call: Call) => /wheelchair/i.test(call.mobility)

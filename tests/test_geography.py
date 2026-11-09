@@ -185,12 +185,84 @@ def test_city_qualified_landmark_wins_over_business_name_extensions(client, monk
     assert client.get(path).json()['assessment']['location_resolution']['place_name'] == 'San Diego International Airport'
 
 
-def test_multiple_exact_named_places_remain_ambiguous(client, monkeypatch):
+def test_multiple_exact_named_places_share_order_but_remain_location_ambiguous(client, monkeypatch):
     other = {**AIRPORT, 'properties': {**AIRPORT['properties'], 'osm_id': 999}}
     async def lookup(query, focus):
         return [AIRPORT, other]
     monkeypatch.setattr('app.geography.fetch_features', lookup)
     publish(client)
     result = client.post(start(client) + '/resolve', json={'location': 'San Diego International Airport, San Diego'}).json()
-    assert result['action'] == 'unknown'
+    assert result['action'] == 'evacuate' and result['match_method'] == 'candidate_consensus'
     assert result['location_resolution']['status'] == 'ambiguous'
+
+# Real Photon references for the user-reported Crown Point/Pacific Beach case.
+CROWN_POINT = [
+    {'properties': {'osm_type': 'W', 'osm_id': 38088908, 'osm_key': 'leisure', 'osm_value': 'park',
+                    'name': 'Crown Point', 'district': 'Pacific Beach', 'city': 'San Diego',
+                    'extent': [-117.2346059, 32.7896345, -117.2317212, 32.782422]},
+     'geometry': {'type': 'Point', 'coordinates': [-117.2329712, 32.7860198]}},
+    {'properties': {'osm_type': 'N', 'osm_id': 13125562301, 'osm_key': 'amenity', 'osm_value': 'parking',
+                    'name': 'Crown Point', 'district': 'Pacific Beach', 'city': 'San Diego'},
+     'geometry': {'type': 'Point', 'coordinates': [-117.233055, 32.7848077]}},
+]
+SHELTER_POLYGON = [[32.81324715804999, -117.26380749550778], [32.81238152593336, -117.21675801953992],
+                   [32.75292129095983, -117.1934049949719], [32.76302656020649, -117.2480098612412]]
+
+
+def test_crown_point_candidates_share_shelter_instruction_without_inventing_caller_pin(client, monkeypatch):
+    async def lookup(query, focus):
+        return CROWN_POINT
+    monkeypatch.setattr('app.geography.fetch_features', lookup)
+    zone = publish(client, id='pacific-beach', level='shelter', polygon=SHELTER_POLYGON, instruction='Shelter in place.')
+    path = start(client)
+    result = client.post(path + '/resolve', json={'location': 'Crown Point, Pacific Beach'}).json()
+    assert result['zone_id'] == zone['id'] and result['action'] == 'shelter'
+    assert result['match_method'] == 'candidate_consensus'
+    assert result['location_confirmation_required'] is True
+    location = result['location_resolution']
+    assert location['status'] == 'ambiguous' and 'lat' not in location
+    assert len(location['candidates']) == 2
+    assert location['uncertainty_bounds'] == CROWN_POINT[0]['properties']['extent']
+    # Changing a live published instruction recomputes agreement, including the
+    # case where a conflicting zone covers only part of a candidate footprint.
+    publish(client, id='conflicting-patch', level='evacuate',
+            polygon=[[32.788, -117.234], [32.789, -117.234], [32.789, -117.233], [32.788, -117.233]])
+    updated = client.get(path).json()['instruction']
+    assert updated['action'] == 'unknown' and updated['match_status'] == 'location_spans_zones'
+
+
+def test_candidates_on_different_sides_of_zone_remain_unknown(client, monkeypatch):
+    other = {**CROWN_POINT[1], 'geometry': {'type': 'Point', 'coordinates': [-117.1, 32.73]}}
+    async def lookup(query, focus):
+        return [CROWN_POINT[0], other]
+    monkeypatch.setattr('app.geography.fetch_features', lookup)
+    publish(client, level='shelter', polygon=SHELTER_POLYGON)
+    result = client.post(start(client) + '/resolve', json={'location': 'Crown Point, Pacific Beach'}).json()
+    assert result['action'] == 'unknown' and result['match_status'] == 'candidate_disagreement'
+    publish(client, id='different-order', level='evacuate',
+            polygon=[[32.72, -117.11], [32.74, -117.11], [32.74, -117.09], [32.72, -117.09]])
+    result = client.post(start(client) + '/resolve', json={'location': 'Crown Point, Pacific Beach'}).json()
+    assert result['action'] == 'unknown' and result['match_status'] == 'candidate_disagreement'
+    assert set(result['matching_zone_ids']) == {'downtown', 'different-order'}
+
+
+def test_candidate_footprints_cannot_cross_a_concave_zone_notch():
+    from app.geography import footprint_relation
+    candidate = {'lat': 1, 'lng': 1, 'bounds': [.5, 3.5, 3.5, .5]}
+    # Every extent corner is inside, but the notch intrudes into its middle.
+    polygon = [(0, 0), (0, 4), (4, 4), (4, 3), (2, 3), (2, 2), (4, 2), (4, 0)]
+    assert footprint_relation(candidate, polygon) == 'partial'
+    assert footprint_relation(candidate, [(0, 0), (0, 4), (4, 4), (4, 0)]) == 'inside'
+    assert footprint_relation(candidate, [(5, 5), (5, 6), (6, 6)]) == 'outside'
+
+
+def test_stale_resolution_cannot_apply_instruction_for_new_location(client):
+    from app.dashboard import instruction_for
+    from app.geography import initialize
+    import sqlite3
+    db = sqlite3.connect(':memory:')
+    db.row_factory = sqlite3.Row
+    db.execute('CREATE TABLE dashboard_zones (data TEXT)')
+    initialize(db)
+    result = instruction_for(db, 'New location', {'status': 'resolved', 'query': 'Old location', 'lat': 1, 'lng': 1})
+    assert result['match_status'] == 'unlocated'

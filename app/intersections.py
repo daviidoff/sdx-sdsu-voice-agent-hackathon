@@ -7,7 +7,7 @@ from difflib import SequenceMatcher
 
 import httpx
 
-from app.geography import _candidate, _distance, _point, _unresolved, fetch_features, normalize, stamp
+from app.geography import _candidate, _distance, _point, _unresolved, fetch_features, normalize, stamp, uncertainty_bounds
 
 
 SUFFIXES = {'st': 'street', 'dr': 'drive', 'ave': 'avenue', 'rd': 'road',
@@ -116,7 +116,7 @@ async def resolve_intersection(query, parsed, focus):
     if exact and all(_distance((exact[0]['lat'], exact[0]['lng']), (c['lat'], c['lng'])) <= .015 for c in exact):
         return {'status': 'resolved', 'query': query, 'resolved_at': stamp(), **exact[0]}
     if len(exact) > 1:
-        return _unresolved(query, 'ambiguous', candidates=exact[:5], message='These streets intersect more than once. Confirm a nearby address.')
+        return _unresolved(query, 'ambiguous', candidates=exact, uncertainty_bounds=uncertainty_bounds(exact), message='These streets intersect more than once. Confirm a nearby address.')
     if suggestions:
         names = list(dict.fromkeys(c['display_name'] for c in suggestions))
         return _unresolved(query, 'needs_confirmation', suggestions=names[:3],

@@ -6,6 +6,25 @@ export type Situation = 'can_leave' | 'needs_help' | 'trapped' | 'unknown'
 export type CallStatus = 'active' | 'instructed' | 'help_assigned' | 'resolved' | 'ended'
 export type Speaker = 'caller' | 'agent' | 'steer' | 'system'
 
+export interface LocationCandidate {
+  lat?: number
+  lng?: number
+  display_name?: string
+  source_url?: string
+  precision?: string
+  bounds?: number[]
+}
+
+export interface LocationResolution extends LocationCandidate {
+  status: string
+  query?: string
+  message?: string
+  source?: string
+  resolved_at?: string
+  candidates?: LocationCandidate[]
+  uncertainty_bounds?: number[] // west, north, east, south
+}
+
 export interface TranscriptLine {
   id: string
   callId: string
@@ -31,7 +50,7 @@ export interface Call {
   canEvacuate?: boolean
   instruction?: { zone_id?: string; text?: string; version?: number; source?: string }
   currentSpatialInstruction?: { zone_id?: string; text?: string; version?: number; source?: string }
-  locationResolution?: { status: string; query?: string; message?: string; display_name?: string; source?: string; source_url?: string; precision?: string; resolved_at?: string }
+  locationResolution?: LocationResolution
   mode?: string
   wheelchairUsers?: number
   scenarioId?: string
@@ -74,6 +93,8 @@ export interface Facility {
 
 
 export interface Responder {
+  simulated?: boolean
+  patrol?: { path: LatLng[]; startedAt: number; durationSec: number }
   id: string
   name: string
   kind: 'engine' | 'ambulance' | 'wheelchair_van'
@@ -103,7 +124,7 @@ export interface Dispatch {
   radio: TranscriptLine[] // agent ↔ crew call
 }
 
-export type Selection = { kind: 'call' | 'crew' | 'zone' | 'facility'; id: string }
+export type Selection = { kind: 'call' | 'crew' | 'zone' | 'facility' | 'fire'; id: string }
 
 export interface Zone {
   id: string
@@ -113,6 +134,14 @@ export interface Zone {
   instruction: string
   area?: string
   version?: number
+}
+
+export interface SimulatedFire {
+  id: string
+  label: string
+  polygon: LatLng[]
+  simulated: true
+  updated_at?: string
 }
 
 export interface FireStage {

@@ -10,6 +10,7 @@ export function unreadMessages(call: BackendCall) {
 }
 
 export function replyStatus(call: BackendCall, eventId: string) {
+  if (call.events.some((e) => e.type === 'steering.acknowledged' && e.payload?.event_id === eventId && e.payload?.status === 'response_requested')) return 'Immediate voice response requested · caller hearing unconfirmed'
   if (call.events.some((e) => e.type === 'steering.acknowledged' && e.payload?.event_id === eventId)) return 'Sent to agent context · caller hearing unconfirmed'
   return call.status === 'ended' ? 'Call ended before context delivery was confirmed' : 'Queued · awaiting voice connection'
 }

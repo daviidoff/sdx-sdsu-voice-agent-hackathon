@@ -11,7 +11,7 @@ export function FacilityDetail({ facility: f }: { facility: Facility }) {
   const d = f.discovery
   const phones = d?.phone_candidates.filter((p, i, all) => all.findIndex((other) => other.number === p.number && other.extension === p.extension) === i) ?? []
   return <div className="space-y-4 p-4 text-sm">
-    <div><Badge variant="outline">{f.simulated ? 'Demonstration record' : d ? 'Discovered · needs review' : 'Team contact'}</Badge>
+    <div>{!f.simulated && <Badge variant="outline">{d ? 'Discovered · needs review' : 'Team contact'}</Badge>}
       <h2 className="mt-3 text-lg font-semibold">{f.name}</h2><p className="text-muted-foreground">{f.type.replaceAll('_', ' ')}</p></div>
     <p>{f.address || 'Street address not recorded'}<br /><span className="text-xs text-muted-foreground">{f.area}</span></p>
     {f.position && <p className="text-xs">Coordinates: {f.position.join(', ')}</p>}

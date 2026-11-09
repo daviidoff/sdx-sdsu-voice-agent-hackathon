@@ -17,24 +17,24 @@ not imported by the live dashboard.
 
 Validation: `npm run build`, `npm run lint`, and the root Python dashboard integration tests.
 
-Crawler reports can be uploaded with **Import crawler results** or published directly by the worker
-using `--publish-url http://127.0.0.1:8000`. Click a map marker or Contacts entry to inspect
-phone candidates, address, exact source pages, timestamps, and review flags. **Show discovered
-facilities** fits the newest imported area. Discovery records remain unverified and do not trigger calls.
+Crawler reports are published directly by the worker using `--publish-url http://127.0.0.1:8000`. Click a map marker or Contacts entry to inspect
+phone candidates, address, exact source pages, timestamps, and review flags. **Fit contacts** fits the newest imported area. Discovery records remain unverified and do not trigger calls.
 The backend uses the existing SQLite database, not Supabase. See `../crawler/README.md` for commands.
 
-Draw a zone with **Instruction Zone**, then click or tap the map to add polygon corners.
+Draw a zone with **Zone**, then click or tap the map to add polygon corners.
 Use **Undo** to remove the last corner. After at least three corners, choose **Finish** or click
-the first point to close the polygon. **Cancel** or Escape discards the drawing. Finishing opens
-an unpublished zone draft; add the operator instruction and publish when ready.
+the first point to close the polygon. **Cancel** or Escape discards the drawing. Finishing opens an instruction editor. Complete the name and guidance; valid edits save automatically after a brief pause and apply to matching callers. **Areas** lists saved instructions and in-progress edits. Save failures stay visible with a retry action. Closing the panel does not cancel a pending save.
 
 ## San Diego contact workflow
 
-Open **Contacts → Search**, draw a polygon (the same Leaflet drawing control used for response
-zones), choose live OSM/web research or offline San Diego fixtures, and start the search. The
-contact boundary is visible only in Contacts and never publishes an evacuation instruction.
+Open **Contacts → Search**, select published instruction areas from the list or map (or use
+**Select all areas**), choose live OSM/web research or offline San Diego fixtures, then click
+**Contact · search**. Selection highlights appear only in Contacts; instruction boundaries
+remain the shared source of truth. Areas without published map boundaries cannot be searched.
 Search jobs and each search/website worker persist their status. Results are filtered to the
-actual polygon. Berlin remains a saved validation example and is excluded from this incident view.
+union of selected polygons, with overlapping results deduplicated. Each search preserves the
+instruction IDs, versions and boundaries it used. Errors display provider codes and a retry
+action; retries use the currently selected published areas. Berlin remains a saved validation example and is excluded from this incident view.
 
 Under **Contacts → Contacts**, inspect a facility's sources and select its phone candidate.
 **Approve mock call** queues an operator-approved simulation. **Act as receiver** opens an incoming
@@ -57,3 +57,31 @@ Validation: `tests/test_contacts.py`, `frontend/tests/contacts.test.mjs`, and
 `.venv/bin/python scripts/smoke_contacts.py --base-url http://127.0.0.1:8002`. The last command uses
 real ElevenLabs speech output and a typed, explicitly mock receptionist; it does not validate
 physical microphone capture. Run an offline contact search before this smoke check.
+
+### Static fire editor
+
+Use **Add fire** on the map, click at least three perimeter corners, then **Finish**
+and **Save fire**. The abstract orange polygon uses the original dashboard fire styling.
+Saved simulated fires persist in SQLite and appear across dashboard refreshes. Click a
+fire to rename it, redraw its perimeter, or delete it. **Undo**, **Cancel**, and Escape
+are available while drawing. Fires stay fixed and do not publish caller instructions;
+use instruction zones separately. The snapshot includes `fires`; edits use
+`POST /api/dashboard/fires` and `DELETE /api/dashboard/fires/{id}`.
+
+### Crew simulation
+
+Open **Crews → Simulate AI crews** to spawn four clearly labeled demo vehicles spread roughly 5–6 km apart around the current map center. Drag a crew marker to reposition it; dropping cancels its current simulated route and restarts its patrol at the new location. Available crews follow slow, synthetic patrol loops. Select a crew and choose a mapped contact under **Route to a point of interest**, then **Set simulated route**. The scripted dispatcher accepts, the route appears, and the marker moves to the destination. Cancel a route or resume patrol after arrival; **Stop simulation** removes the session's crews and routes. Simulation resets on page reload.
+
+Destination routes use the existing OSRM lookup, with an explicitly labeled straight-line simulation if unavailable. Patrol paths are illustrative, and routes do not account for disaster conditions. Radio exchanges are scripted; simulation does not contact crews, steer live calls, or confirm real assistance.
+
+## Workspace controls
+
+Drag a panel by its header or resize from the lower-right corner. The focused header and resize
+handle also support arrow keys. Close panels with **×** and reopen them from the workspace toolbar;
+**Map only** clears the map and **Reset layout** restores the default arrangement. On smaller screens,
+the active panel becomes a bottom sheet. Contacts, Calls and Areas switch the overview; selecting a
+record opens its details. The Inbox opens as a movable panel.
+
+UI regression check: `.venv/bin/python scripts/smoke_workspace_ui.py` from the repository root.
+It checks panel interactions, mobile sizes, serialized autosave, close-during-save and failed-save retry
+using intercepted browser fixtures, without changing the live backend.

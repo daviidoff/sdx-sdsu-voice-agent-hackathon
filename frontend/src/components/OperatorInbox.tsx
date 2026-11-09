@@ -5,9 +5,9 @@ import { api } from '@/lib/feed'
 import type { BackendCall } from '@/lib/feed'
 import { inboxMessages, unreadMessages, replyStatus } from '@/lib/inbox'
 
-export function OperatorInbox({ calls, onClose }: { calls: BackendCall[]; onClose: () => void }) {
+export function OperatorInbox({ calls, onClose, embedded = false }: { calls: BackendCall[]; onClose: () => void; embedded?: boolean }) {
   const dialog = useRef<HTMLDialogElement>(null)
-  useEffect(() => { dialog.current?.showModal() }, [])
+  useEffect(() => { if (!embedded) dialog.current?.showModal() }, [embedded])
   const threads = calls.filter((call) => inboxMessages(call).length).sort((a, b) =>
     Number(inboxMessages(b).at(-1)?.id) - Number(inboxMessages(a).at(-1)?.id))
   const [selected, setSelected] = useState<string>()
@@ -41,14 +41,14 @@ export function OperatorInbox({ calls, onClose }: { calls: BackendCall[]; onClos
     catch (e) { setError(e instanceof Error ? e.message : 'Selection failed') }
     finally { setBusy(false) }
   }
-  return <dialog ref={dialog} onCancel={(event) => { event.preventDefault(); if (!busy) onClose() }} className="fixed inset-0 m-0 h-dvh max-h-none w-screen max-w-none bg-black/40 p-2 text-foreground sm:p-6" aria-labelledby="inbox-title">
-    <div className="mx-auto flex h-full max-w-6xl flex-col overflow-hidden rounded-xl border bg-background shadow-xl">
-      <header className="flex items-center gap-3 border-b px-5 py-4">
+  const content = <>
+    <div className="mx-auto flex h-full max-w-6xl flex-col overflow-hidden bg-background">
+      {!embedded && <header className="flex items-center gap-3 border-b px-5 py-4">
         <Inbox className="size-5" /><div className="flex-1"><h2 id="inbox-title" className="font-semibold">Operator inbox</h2><p className="text-xs text-muted-foreground">Agent requests, call history and operator replies</p></div>
         <Button variant="ghost" size="icon" aria-label="Close inbox" autoFocus disabled={busy} onClick={onClose}><X className="size-4" /></Button>
-      </header>
+      </header>}
       {error && <div role="alert" className="border-b bg-red-50 px-5 py-2 text-sm text-red-800">{error}</div>}
-      <div className="grid min-h-0 flex-1 grid-rows-[minmax(100px,25%)_1fr] sm:grid-cols-[260px_1fr] sm:grid-rows-1">
+      <div className={`grid min-h-0 flex-1 grid-rows-[minmax(80px,25%)_1fr] ${embedded ? '' : 'sm:grid-cols-[260px_1fr] sm:grid-rows-1'}`}>
         <nav aria-label="Inbox conversations" className="min-h-0 overflow-y-auto border-r bg-muted/20 p-2">
           {!threads.length && <p className="p-4 text-sm text-muted-foreground">No messages yet. Agent requests and zone conflicts will appear here.</p>}
           {threads.map((thread) => <button key={thread.id} disabled={busy} aria-current={call?.id === thread.id ? 'true' : undefined}
@@ -84,5 +84,6 @@ export function OperatorInbox({ calls, onClose }: { calls: BackendCall[]; onClos
         </section> : <div className="flex items-center justify-center p-8 text-sm text-muted-foreground">Incoming requests will appear here with their conversation history.</div>}
       </div>
     </div>
-  </dialog>
+  </>
+  return embedded ? content : <dialog ref={dialog} onCancel={(event) => { event.preventDefault(); if (!busy) onClose() }} className="fixed inset-0 m-0 h-dvh max-h-none w-screen max-w-none bg-black/40 p-2 text-foreground sm:p-6" aria-labelledby="inbox-title">{content}</dialog>
 }

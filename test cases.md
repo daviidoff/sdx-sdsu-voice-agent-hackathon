@@ -67,7 +67,13 @@ Repository inspection on November 8 is a moving snapshot while another agent wor
 | Assistance | Background protocol/capacity jobs and proposals, with stale-result checks. | No actual dispatch. Human acceptance/ownership/completion tracking needs a defined contract before those assertions are executable. |
 | Geography/discovery | Separate OSM facility crawler with explicit bounding boxes and evidence flags. | A facility centroid is not a caller's position; a listed shelter/taxi is not verified capacity or an authorized safe destination. |
 
-The planning phase changed only this Markdown file. The subsequent authorized implementation adds evaluation code and evaluator tests; it does not change the production agent prompt or application behavior to satisfy expectations.
+The initial planning phase changed only this Markdown file. The user subsequently authorized building the evaluator, evaluating failures, fixing the agent/application, and retesting. The current implementation includes a read-back location proposal stage, operator inbox tools, and explicit provider response-completion handling. Reports distinguish failed assertions, unimplemented capabilities, and remaining semantic review.
+
+### Adaptation of the supplied CrisisReach guideline
+
+The user supplied a friend's guideline as optional design input, not an official emergency protocol. Adopted: a brief honest simulation disclosure; calm, short, relevant questions; immediate danger interrupting routine intake; functional accessibility questions without assumptions; separation of official instructions, caller reports, and unverified offers; and no claims of delivery, capacity, dispatch, or ETA without evidence. The existing product name remains unchanged.
+
+Project-specific adaptations: location read-back is mandatory for each new reported current place, including mid-call movement. Pending confirmation clears the old instruction/map rather than retaining obsolete advice. General urgent-danger escalation can precede confirmation; local evacuation advice cannot. Additional needs and resource offers go to the existing operator inbox with their uncertainty intact. Receipt means saved to that inbox, not accepted by emergency services. The guideline does not establish medical protocols, safe routes, verified shelters, or new dispatch capabilities.
 
 ## 4. Shared synthetic test data
 

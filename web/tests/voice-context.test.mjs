@@ -37,3 +37,30 @@ test('old jobs and events from another call never enter voice context', () => {
   assert.equal(voiceContext({call_id: 'current', type: 'job.completed', payload: {revision: 6}}, call), undefined);
   assert.match(voiceContext({call_id: 'current', type: 'job.completed', payload: {revision: 7, result: 'current'}}, call), /current/);
 });
+
+// Operator messages use the supported turn trigger but are never caller evidence.
+import {operatorTurnMessage, OperatorTurnGuard} from '../src/voice-context.ts';
+
+test('explicit steering requests a spoken operator turn and background facts do not', () => {
+  const event={call_id:'current',type:'steering.queued',payload:{id:'operator-1',text:'Ask whether pets are present.'}};
+  const text=operatorTurnMessage(event,call);
+  assert.match(text,/OPERATOR CONTROL MESSAGE/);
+  assert.match(text,/not caller speech/);
+  assert.match(text,/immediate spoken response/);
+  assert.match(text,/Ask whether pets are present/);
+  assert.equal(operatorTurnMessage({...event,call_id:'other'},call),undefined);
+  assert.equal(operatorTurnMessage({...event,type:'assessment.updated'},call),undefined);
+});
+
+test('operator echoes cannot enter caller transcript or unlock caller fact writes', () => {
+  const guard=new OperatorTurnGuard();
+  assert.equal(guard.canRecordCallerFacts(),true);
+  guard.sentMessage('operator envelope');
+  assert.equal(guard.canRecordCallerFacts(),false);
+  assert.equal(guard.callerMessage('operator envelope'),false);
+  assert.equal(guard.canRecordCallerFacts(),false);
+  assert.equal(guard.callerMessage('There are two of us'),true);
+  assert.equal(guard.canRecordCallerFacts(),true);
+  assert.equal(guard.callerMessage('operator envelope'),false);
+  assert.equal(guard.canRecordCallerFacts(),true);
+});

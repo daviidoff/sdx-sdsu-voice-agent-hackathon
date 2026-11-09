@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { Accessibility, Phone } from 'lucide-react'
+import { Accessibility, Phone, Truck, Building2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { activeDispatch, etaMin } from '@/lib/dispatch'
@@ -18,8 +19,9 @@ export function CallList({
   selection,
   onSelect,
   now,
-  tab, onTabChange, contactsContent,
+  tab, onTabChange, contactsContent, onSimulate, onStopSimulation,
 }: {
+  onSimulate: () => void; onStopSimulation: () => void
   tab: string; onTabChange: (tab: string) => void; contactsContent?: ReactNode
   calls: Call[]
   facilities: Facility[]
@@ -32,14 +34,13 @@ export function CallList({
   now: number
 }) {
   const sorted = [...calls].sort(byPriority)
-  const busy = dispatches.filter((d) => d.status !== 'done').length
   return (
     <Tabs value={tab} onValueChange={onTabChange} className="flex h-full min-h-0 flex-col gap-0">
-      <div className="border-b px-3 py-2">
+      <div className="hidden">
         <TabsList className="w-full">
-          <TabsTrigger value="calls">Calls ({calls.length})</TabsTrigger>
-          <TabsTrigger value="crews">Crews ({busy}/{responders.length})</TabsTrigger>
-          <TabsTrigger value="contacts">Contacts</TabsTrigger>
+          <TabsTrigger value="calls" className="gap-1.5"><Phone className="size-3.5" /><span>Calls</span><span className="tab-count">{calls.length}</span></TabsTrigger>
+          <TabsTrigger value="crews" className="gap-1.5" title={`${responders.length} crews`}><Truck className="size-3.5" /><span>Crews</span></TabsTrigger>
+          <TabsTrigger value="contacts" className="gap-1.5"><Building2 className="size-3.5" />Contacts</TabsTrigger>
         </TabsList>
       </div>
       <TabsContent value="calls" className="min-h-0 min-w-0 flex-1">
@@ -57,7 +58,7 @@ export function CallList({
                   onClick={() => onSelect({ kind: 'call', id: c.id })}
                   className={cn(
                     'w-full min-w-0 rounded-lg border bg-card p-3 text-left transition hover:bg-muted/60',
-                    selection?.kind === 'call' && selection.id === c.id && 'border-foreground/40 ring-2 ring-foreground/10',
+                    selection?.kind === 'call' && selection.id === c.id && 'border-teal-600 bg-teal-50/50 ring-1 ring-teal-600/15',
                     (c.status === 'resolved' || c.status === 'ended') && 'border-dashed',
                   )}
                 >
@@ -89,7 +90,15 @@ export function CallList({
       <TabsContent value="crews" className="min-h-0 min-w-0 flex-1">
         <div className="h-full min-w-0 overflow-x-hidden overflow-y-auto">
           <div className="flex flex-col gap-2 p-3">
-            <p className="text-xs text-muted-foreground">No live crew or dispatch service is connected. Assistance remains unconfirmed.</p>
+            {responders.length === 0 ? <div className="space-y-3 rounded-lg border border-dashed p-4">
+              <h3 className="text-sm font-semibold">No crews yet</h3>
+              <p className="text-xs text-muted-foreground">Spread four simulated crews across the area. Drag their map markers to reposition them, or select a crew to set a route.</p>
+              <Button size="sm" onClick={onSimulate}>Simulate AI crews</Button>
+            </div> : <div className="space-y-2 rounded-lg border bg-teal-50 p-3">
+              <div className="text-sm font-medium">Simulation running · {responders.length} crews</div>
+              <p className="text-xs text-muted-foreground">Drag any crew on the map to move it. Dropping restarts its patrol and cancels its current simulated route.</p>
+              <Button size="sm" variant="outline" onClick={onStopSimulation}>Stop simulation</Button>
+            </div>}
             {responders.map((r) => {
               const d = activeDispatch(dispatches, r.id)
               return (
@@ -98,7 +107,7 @@ export function CallList({
                   onClick={() => onSelect({ kind: 'crew', id: r.id })}
                   className={cn(
                     'w-full min-w-0 rounded-lg border bg-card p-3 text-left transition hover:bg-muted/60',
-                    selection?.kind === 'crew' && selection.id === r.id && 'border-foreground/40 ring-2 ring-foreground/10',
+                    selection?.kind === 'crew' && selection.id === r.id && 'border-teal-600 bg-teal-50/50 ring-1 ring-teal-600/15',
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -133,7 +142,7 @@ export function CallList({
               const zone = f.position && zoneFor(f.position, zones)
               return (
                 <button key={f.id} onClick={() => onSelect({ kind: 'facility', id: f.id })} className={cn("rounded-lg border bg-card p-3 text-left hover:bg-muted/60", selection?.id === f.id && "border-blue-600 ring-1 ring-blue-600")}>
-                  <div className="text-sm font-medium">{f.name} {f.simulated && <Badge variant="outline">Demonstration record</Badge>}</div>
+                  <div className="text-sm font-medium">{f.name}</div>
                   <div className="text-xs text-muted-foreground">{f.type.replaceAll('_', ' ')}{f.area ? ` · ${f.area}` : ''}{f.mobilitySupport ? ` · ${f.mobilitySupport.replaceAll('_', ' ')}` : ''}</div>
                   <div className="mt-1.5 flex items-center gap-1.5 text-xs">
                     <Phone className="size-3" /> {f.contact || (f.discovery?.phone_candidates.length ? 'Multiple candidates · review' : 'Phone not found')}

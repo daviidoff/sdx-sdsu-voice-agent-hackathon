@@ -34,6 +34,16 @@ def evaluate(expect, state, responses, tools, sandbox):
     if 'zone' in expect:
         actual = (state.get('instruction') or {}).get('zone_id')
         checks.append(check('Correct current zone', actual==expect['zone'], actual))
+    if 'position' in expect:
+        location = facts.get('location_resolution') or {}
+        actual = [location.get('lat'),location.get('lng')]
+        checks.append(check('Mapped coordinates match independent fixture expectation',actual==expect['position'],actual))
+    if 'pending_location' in expect:
+        checks.append(check('Reported place awaits confirmation',state.get('pending_location')==expect['pending_location'],state.get('pending_location')))
+        checks.append(check('Old guidance and map cleared while confirming',state.get('instruction') is None and not facts.get('location_resolution')))
+    if 'operator_contains' in expect:
+        inbox = '\n'.join(str(e['payload'].get('text','')) for e in state['events'] if e['type']=='operator.requested')
+        checks.append(check('Relevant need received in operator inbox',re.search(expect['operator_contains'],inbox,re.I) is not None,inbox))
     if 'version' in expect:
         actual = (state.get('instruction') or {}).get('version')
         checks.append(check('Current instruction version', actual==expect['version'],actual))
@@ -79,8 +89,11 @@ def inject(step, sandbox, agent, dashboard, result):
         agent.context(step['text'])
     elif action=='steer':
         queued = sandbox.api(f'/api/calls/{sandbox.call_id}/steering',{'text':step['text']})['events'][-1]
-        agent.context('Operator steering: '+json.dumps(queued['payload']))
-        sandbox.api(f'/api/calls/{sandbox.call_id}/steering/{queued["id"]}/ack',{'status':'context_delivered'})
+        before = sandbox.call()['assessment']
+        evidence['responses'] = agent.operator_message(queued)
+        evidence['state'] = sandbox.call()
+        evidence['checks'].append(check('Operator message triggers a response',bool(evidence['responses'])))
+        evidence['checks'].append(check('Operator message does not invent caller facts',before==sandbox.call()['assessment']))
     elif action=='other_call':
         sandbox.other_id=sandbox.new_call()
         sandbox.api('/api/calls/'+sandbox.other_id+'/resolve',{'location':'River Park'})
@@ -174,7 +187,10 @@ def run_case(case, credentials, directory, browser=None, timeout=35, agent_facto
                     evidence['dashboard']=view
                     if image:
                         evidence['screenshot']=filename
-                    evidence['checks'].extend([check('Dashboard location/instruction converged',not view['render_error'],view['render_error']),check('Rendered marker count',view['marker_count_matches']),check('Dashboard has no JS exceptions',not view['page_errors'],view['page_errors'])])
+                    evidence['checks'].extend([check('Dashboard location/instruction converged',not view['render_error'],view['render_error']),check('Rendered marker count',view['marker_count_matches']),check('Map has visible dimensions',view['map_visible'],view['map_box']),check('Dashboard has no JS exceptions',not view['page_errors'],view['page_errors'])])
+                    evidence['checks'].append(check('Map animation settled',view['map_settled']))
+                    if view['marker_geometry'] is not None:
+                        evidence['checks'].append(check('Selected caller rendered at named fixture position',view['marker_geometry']['matches'],view['marker_geometry']))
                 result['checks'].extend(evidence['checks'])
             result['status']='failed' if any(not c['passed'] for c in result['checks']) else 'blocked' if case['gaps'] else 'review'
         except Exception as exc:
@@ -235,8 +251,8 @@ def main():
         return 0
     directory=ROOT/(args.output or '.runtime/evaluations/'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ'))
     directory.mkdir(parents=True,exist_ok=True)
-    credentials={**dotenv_values(ROOT/'.env')}
     import os
+    credentials={**dotenv_values(os.environ.get('EVAL_CREDENTIALS_FILE',str(ROOT/'.env')))}
     credentials.update(os.environ)
     if not args.catalog_only:
         frozen_context=directory/'voice-context.ts'
@@ -250,6 +266,8 @@ def main():
                         'shard_index':args.shard_index,'shard_count':args.shard_count,
                         'limitations':['Semantic rubrics require human review.','Synthetic geocoding and local worker only.','No actual dispatch or acceptance.','No exhaustive fault/wording coverage claimed.']},'cases':[]}
     sources=[ROOT/'scripts/configure_elevenlabs.py',ROOT/'web/src/voice-context.ts',ROOT/'web/src/main.ts',ROOT/'test cases.md']
+    if (ROOT/'evaluation-source-manifest.json').exists():
+        report['metadata']['source_snapshot']=json.loads((ROOT/'evaluation-source-manifest.json').read_text())
     sources += [p for folder in ('evaluation','app','protocols','frontend/src','frontend/dist') for p in (ROOT/folder).rglob('*') if p.is_file() and p.suffix in {'.py','.ts','.tsx','.mjs','.json','.js','.css','.html'}]
     report['metadata']['source_hashes']={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sources}
     report['metadata']['git_head']=subprocess.run(['git','rev-parse','HEAD'],cwd=ROOT,capture_output=True,text=True).stdout.strip()
@@ -263,6 +281,8 @@ def main():
                 r=httpx.get('https://api.elevenlabs.io/v1/convai/agents/'+credentials['ELEVENLABS_AGENT_ID'],headers={'xi-api-key':credentials['ELEVENLABS_API_KEY']},timeout=20)
                 r.raise_for_status()
                 report['metadata']['agent']=fingerprint(r.json())
+                if 'agent_response_complete' not in r.json().get('conversation_config',{}).get('conversation',{}).get('client_events',[]):
+                    unavailable='Enable agent_response_complete in the dedicated agent before evaluating; idle gaps are not a reliable turn boundary.'
             except Exception as exc:
                 unavailable='Provider preflight unavailable: '+type(exc).__name__
     with ExitStack() as stack:

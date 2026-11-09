@@ -2,12 +2,14 @@
 
 from datetime import datetime, timezone
 import json
+import errno
+import os
 import re
 import socket
 import ssl
 import threading
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 from urllib.request import HTTPSHandler, Request, build_opener
 
 from .models import ProviderError, SearchResult
@@ -58,6 +60,10 @@ class OSMProvider:
     MAX_BYTES = 5_000_000
 
     def __init__(self, *, transport=None):
+        self.endpoint = os.environ.get('OVERPASS_API_URL', self.ENDPOINT)
+        parsed = urlsplit(self.endpoint)
+        if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
+            raise ValueError('OVERPASS_API_URL must be an HTTPS endpoint without credentials or query parameters')
         self.transport = transport or self._http
         self._lock = threading.Lock()
         self._prepared = False
@@ -92,9 +98,9 @@ class OSMProvider:
                 "(\n" + "\n".join(filters) + f"\n);\nout body center {self.ELEMENT_LIMIT + 1};")
 
     def _http(self, query, timeout):
-        request = Request(self.ENDPOINT, data=urlencode({"data": query}).encode(), method="POST",
+        request = Request(self.endpoint, data=urlencode({"data": query}).encode(), method="POST",
                           headers={"Content-Type": "application/x-www-form-urlencoded",
-                                   "User-Agent": "DisasterResponseDiscovery/0.1 (bounded facility lookup)",
+                                   "User-Agent": "EmergencyOSDemo/0.1 (+https://github.com/daviidoff/sdx-sdsu-voice-agent-hackathon)",
                                    "Accept": "application/json"})
         try:
             with build_opener(NoRedirects(), HTTPSHandler(context=tls_context())).open(request, timeout=timeout) as response:
@@ -110,9 +116,15 @@ class OSMProvider:
         except URLError as exc:
             if isinstance(exc.reason, ssl.SSLCertVerificationError):
                 raise ProviderError("osm_tls_certificate_error") from None
+            if isinstance(exc.reason, (socket.timeout, TimeoutError)):
+                raise ProviderError("osm_timeout") from None
+            if getattr(exc.reason, 'errno', None) == errno.ECONNREFUSED:
+                raise ProviderError("osm_connection_refused") from None
+            if isinstance(exc.reason, socket.gaierror):
+                raise ProviderError("osm_dns_error") from None
             raise ProviderError("osm_network_error") from None
         except (socket.timeout, TimeoutError):
-            raise ProviderError("osm_network_error") from None
+            raise ProviderError("osm_timeout") from None
         except (ValueError, UnicodeDecodeError):
             raise ProviderError("osm_invalid_json") from None
 

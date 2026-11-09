@@ -56,6 +56,76 @@ def _point(lat, lng):
         return None
 
 
+def candidate_bounds(candidate):
+    """OSM/Photon extent in [west, north, east, south] order, never inferred size."""
+    bounds = candidate.get('bounds')
+    if not isinstance(bounds, (list, tuple)) or len(bounds) != 4:
+        return None
+    try:
+        west, north, east, south = map(float, bounds)
+    except (ValueError, TypeError):
+        return None
+    if not all(map(math.isfinite, (west, north, east, south))) or not (-180 <= west <= east <= 180 and -90 <= south <= north <= 90):
+        return None
+    return [west, north, east, south]
+
+
+def uncertainty_bounds(candidates):
+    """Envelope of sourced candidate references/footprints, not caller accuracy."""
+    bounds = []
+    for candidate in candidates:
+        point = _point(candidate.get('lat'), candidate.get('lng'))
+        if point:
+            bounds.append([point[1], point[0], point[1], point[0]])
+        if extent := candidate_bounds(candidate):
+            bounds.append(extent)
+    return [min(b[0] for b in bounds), max(b[1] for b in bounds),
+            max(b[2] for b in bounds), min(b[3] for b in bounds)] if bounds else None
+
+
+def _segments_intersect(a, b, c, d, proper=False):
+    def cross(p, q, r):
+        return (q[0]-p[0])*(r[1]-p[1]) - (q[1]-p[1])*(r[0]-p[0])
+    values = cross(a, b, c), cross(a, b, d), cross(c, d, a), cross(c, d, b)
+    if values[0]*values[1] < -1e-20 and values[2]*values[3] < -1e-20:
+        return True
+    if proper:
+        return False
+    for value, p, q, r in ((values[0], a, b, c), (values[1], a, b, d),
+                           (values[2], c, d, a), (values[3], c, d, b)):
+        if abs(value) < 1e-10 and min(p[0], q[0])-1e-10 <= r[0] <= max(p[0], q[0])+1e-10 and min(p[1], q[1])-1e-10 <= r[1] <= max(p[1], q[1])+1e-10:
+            return True
+    return False
+
+
+def footprint_relation(candidate, polygon):
+    """Return inside/partial/outside for a sourced footprint (point if no extent).
+
+    A bounding box deliberately overestimates a feature's shape. A zone that only
+    intersects that envelope cannot establish an instruction for the whole place.
+    Checking edges and interior zone vertices also catches concave-zone notches.
+    """
+    point = _point(candidate.get('lat'), candidate.get('lng'))
+    if not polygon or point is None:
+        return 'outside'
+    bounds = candidate_bounds(candidate)
+    if not bounds:
+        return 'inside' if point_in_polygon(point, polygon) else 'outside'
+    west, north, east, south = bounds
+    # Include the provider's reference when an imperfect extent omits it.
+    west, north, east, south = min(west, point[1]), max(north, point[0]), max(east, point[1]), min(south, point[0])
+    corners = [(south, west), (south, east), (north, east), (north, west)]
+    pairs = [(corners[i-1], corners[i]) for i in range(4)]
+    edges = [(polygon[i-1], polygon[i]) for i in range(len(polygon))]
+    contained = [point_in_polygon(c, polygon) for c in corners]
+    interior_vertex = any(south < lat < north and west < lng < east for lat, lng in polygon)
+    crosses = any(_segments_intersect(a, b, c, d, proper=True) for a, b in pairs for c, d in edges)
+    if all(contained) and not interior_vertex and not crosses:
+        return 'inside'
+    touches = any(_segments_intersect(a, b, c, d) for a, b in pairs for c, d in edges)
+    return 'partial' if any(contained) or interior_vertex or touches else 'outside'
+
+
 def _focus(zones):
     points = [point for zone in zones for point in zone.get('polygon', [])]
     if not points:
@@ -137,11 +207,11 @@ async def resolve_place(db, query, facilities, zones):
     if len(local) == 1:
         return {'status': 'resolved', 'query': query, 'resolved_at': stamp(), **local[0]}
     if len(local) > 1:
-        return _unresolved(query, 'ambiguous', candidates=local)
+        return _unresolved(query, 'ambiguous', candidates=local, uncertainty_bounds=uncertainty_bounds(local))
     if os.getenv('GEOCODING_ENABLED', '1') == '0':
         return _unresolved(query, message='No local coordinate record; online geocoding is disabled.')
     focus = _focus(zones)
-    cache_key = hashlib.sha256(json.dumps([3, normalized, focus, os.getenv('PHOTON_URL', ''), os.getenv('GEOCODING_OSM_MAP_URL', '')], sort_keys=True).encode()).hexdigest()
+    cache_key = hashlib.sha256(json.dumps([4, normalized, focus, os.getenv('PHOTON_URL', ''), os.getenv('GEOCODING_OSM_MAP_URL', '')], sort_keys=True).encode()).hexdigest()
     cached = db.execute('SELECT data,created_at FROM geocode_cache WHERE cache_key=?', (cache_key,)).fetchone()
     if cached and time.time() - cached['created_at'] < 86400:
         result = json.loads(cached['data'])
@@ -182,7 +252,7 @@ async def resolve_place(db, query, facilities, zones):
     if len(candidates) == 1:
         result = {'status': 'resolved', 'query': query, 'resolved_at': stamp(), **candidates[0]}
     else:
-        result = _unresolved(query, 'ambiguous' if candidates else 'unresolved', candidates=candidates[:5],
+        result = _unresolved(query, 'ambiguous' if candidates else 'unresolved', candidates=candidates, uncertainty_bounds=uncertainty_bounds(candidates),
             message='More precise caller location or an operator pin is required.' if candidates else 'No matching named place was found.')
     db.execute('INSERT OR REPLACE INTO geocode_cache VALUES (?,?,?)', (cache_key, json.dumps(result), time.time()))
     db.commit()

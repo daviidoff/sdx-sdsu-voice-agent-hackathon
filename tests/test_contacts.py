@@ -1,13 +1,22 @@
 import time
+import pytest
 from fastapi.testclient import TestClient
 from app.backend import create_app
-from app.contacts import Search
+from app.contacts import search_error
 
 POLYGON = [[32.79,-117.18],[32.79,-117.09],[32.70,-117.09],[32.70,-117.18]]
 
 
+def publish_zone(client, identifier, polygon):
+    response = client.post('/api/dashboard/zones', json={'id': identifier, 'label': identifier, 'area': identifier,
+        'level': 'warning', 'instruction': 'Await operator guidance', 'polygon': polygon})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
 def search(client, identifier='search1'):
-    response = client.post('/api/contacts/searches', json={'id': identifier, 'provider': 'mock', 'polygon': POLYGON})
+    publish_zone(client, 'zone1', POLYGON)
+    response = client.post('/api/contacts/searches', json={'id': identifier, 'provider': 'mock', 'zone_ids': ['zone1']})
     assert response.status_code == 202, response.text
     for _ in range(100):
         snapshot = client.get('/api/dashboard/snapshot').json()
@@ -26,9 +35,9 @@ def test_search_polygon_and_replay(tmp_path, monkeypatch):
         assert found and all(32.70 <= f['latitude'] <= 32.79 for f in found)
         assert all(f['incident_id'] == 'san-diego-demo' and f['simulated'] for f in found)
         assert not any('Distant' in f['name'] or 'South' in f['name'] for f in found)
-        assert client.post('/api/contacts/searches', json={'id':'search1','provider':'mock','polygon':POLYGON}).status_code == 202
+        assert client.post('/api/contacts/searches', json={'id':'search1','provider':'mock','zone_ids':['zone1']}).status_code == 202
         assert len(client.get('/api/contacts/overview').json()['searches']) == 1
-        assert client.post('/api/contacts/searches', json={'id':'search1','provider':'osm','polygon':POLYGON}).status_code == 409
+        assert client.post('/api/contacts/searches', json={'id':'search1','provider':'osm','zone_ids':['zone1']}).status_code == 409
         assert client.post('/api/contacts/searches', json={'id':'berlin','polygon':[[52.5,13.4],[52.6,13.4],[52.6,13.5]]}).status_code == 422
 
 
@@ -105,3 +114,56 @@ def test_scripted_call_and_report_correction(tmp_path, monkeypatch):
         needs=client.get('/api/contacts/needs').json()
         assert len(needs)==1 and needs[0]['people_count']==3 and not needs[0]['reception_verified']
         assert client.get('/api/contacts/overview').json()['reviews']==[]
+
+
+def test_instruction_zone_union_snapshot_and_validation(tmp_path, monkeypatch):
+    monkeypatch.setenv('TEAM_DATA_DIR', str(tmp_path))
+    with TestClient(create_app(tmp_path/'db')) as client:
+        # Disjoint zones exclude the gap; repeated zones do not duplicate results.
+        left = [[32.79,-117.18],[32.79,-117.15],[32.70,-117.15],[32.70,-117.18]]
+        right = [[32.79,-117.12],[32.79,-117.09],[32.70,-117.09],[32.70,-117.12]]
+        first = publish_zone(client, 'left', left)
+        publish_zone(client, 'right', right)
+        response = client.post('/api/contacts/searches', json={'id':'union','provider':'mock','zone_ids':['left','right','left']})
+        assert response.status_code == 202, response.text
+        assert response.json()['zone_ids'] == ['left','right']
+        publish_zone(client, 'left', POLYGON)
+        for _ in range(100):
+            job = client.get('/api/contacts/overview').json()['searches'][0]
+            if job['status'] not in ('queued','running'): break
+            time.sleep(.01)
+        assert job['status'] in ('completed','partial'), job
+        assert job['zones'][0] == first
+        snapshot = client.get('/api/dashboard/snapshot').json()
+        found = [f for f in snapshot['facilities'] if f['id'] in job['facility_ids']]
+        assert found
+        assert all(f['longitude'] <= -117.15 or f['longitude'] >= -117.12 for f in found)
+        assert len(job['facility_ids']) == len(set(job['facility_ids']))
+        publish_zone(client, 'named', [])
+        publish_zone(client, 'berlin', [[52.5,13.4],[52.6,13.4],[52.6,13.5]])
+        for identifier in ('missing', 'named', 'berlin'):
+            assert client.post('/api/contacts/searches',json={'id':identifier,'zone_ids':[identifier]}).status_code == 422
+        assert client.post('/api/contacts/searches',json={'id':'none','zone_ids':[]}).status_code == 422
+
+
+@pytest.mark.parametrize('error_code', ['osm_timeout', 'osm_connection_refused'])
+def test_failed_discovery_exposes_reason_and_allows_retry(tmp_path, monkeypatch, error_code):
+    from crawler.disaster_crawler.osm import OSMProvider
+    from crawler.disaster_crawler.models import ProviderError
+    monkeypatch.setenv('TEAM_DATA_DIR', str(tmp_path))
+    def fail(*args): raise ProviderError(error_code)
+    monkeypatch.setattr(OSMProvider, '_http', fail)
+    with TestClient(create_app(tmp_path/'db')) as client:
+        publish_zone(client, 'zone1', POLYGON)
+        for identifier in ('failure','retry'):
+            assert client.post('/api/contacts/searches',json={'id':identifier,'zone_ids':['zone1']}).status_code == 202
+            for _ in range(100):
+                job=client.get('/api/contacts/overview').json()['searches'][0]
+                if job['status'] not in ('queued','running'):break
+                time.sleep(.01)
+            assert job['status']=='failed',job
+            assert job['error_codes']==[error_code]
+            assert 'Retry' in job['error']
+            assert all(w['error_code']==error_code for w in job['workers'].values())
+        assert len(client.get('/api/contacts/overview').json()['searches'])==2
+    assert 'osm_tls_certificate_error' in search_error(['osm_tls_certificate_error'])
