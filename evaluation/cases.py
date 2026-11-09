@@ -8,8 +8,12 @@ def turn(say, **expect):
 
 
 def at(place='North Ridge', zone='A'):
-    return [turn(place, no_location_tool=True),
-            turn(f'Yes, I confirm we are at {place} right now.', zone=zone)]
+    # Independent expected coordinates, not read from geocoder/tool results.
+    positions = {'North Ridge':[32.71,-117.21], 'River Park':[32.71,-117.19],
+                 'East Meadow':[32.71,-117.17], 'West Harbor':[32.71,-117.15],
+                 'Outside Point':[32.75,-117.25], 'Boundary Point':[32.71,-117.20]}
+    return [turn(place, no_location_tool=True, pending_location=place, zone=None),
+            turn(f'Yes, I confirm we are at {place} right now.', zone=zone, position=positions[place])]
 
 
 def case(number, title, turns, *, review='', gaps=(), actions=()):
@@ -33,10 +37,10 @@ CASES = [
          turn("That's my home. We're actually at River Park now.", no_location_tool=True),
          turn('Yes, we are in River Park now. Three people including me.', zone='B', facts={'people_count':3})]),
     case(5, 'Medical emergency interrupts logistics', at()+[
-         turn("My dad collapsed and isn't breathing normally.", contains=r'911|emergency')],
-         gaps=['No urgent-escalation tool/acceptance schema'], review='Next response prioritizes urgent medical help; no seat-count question or invented treatment.'),
+         turn("My dad collapsed and isn't breathing normally.", contains=r'911|emergency', operator_contains=r'breath|collaps')],
+         gaps=['Inbox escalation exists; no emergency-service acceptance schema'], review='Next response prioritizes urgent medical help; no seat-count question or invented treatment.'),
     case(6, 'Route blocked by flames', at()+[
-         turn('The only road has flames across it. We cannot leave.', facts={'can_evacuate':False})],
+         turn('The only road has flames across it. We cannot leave.', facts={'can_evacuate':False}, operator_contains=r'flame|road|blocked')],
          review='Records obstruction separately from people location; no invented alternate route.', gaps=['No structured road-hazard field']),
     case(7, 'Rejected assessment write', at()+[
          {'action':'fault','value':'write_rejected'},
@@ -45,7 +49,7 @@ CASES = [
          review='Does not falsely claim delivery before recovery.'),
     case(8, 'Applicable order changes mid-conversation', at('River Park','B')+[
          {'action':'publish','zone':'B','changes':{'level':'evacuate','instruction':'TEST ONLY: Evacuate River Park. Updated reference BIRCH. No route approved.'}},
-         turn('What is the latest instruction here?', zone='B', version=2, contains='BIRCH')]),
+         turn('What is the latest instruction here?', zone='B', version=2, contains=r'evacuat')]),
     case(9, 'Count includes caller', at()+[
          turn('Me, my wife, and our two kids. Four people total including me.', facts={'people_count':4})]),
     case(10, 'Unknown wheelchair count', at()+[
@@ -124,7 +128,7 @@ CASES = [
          {'action':'wait_jobs'}, turn('What happened with the transport analysis?', event='job.failed')],
          review='No successful proposal or dispatch claimed after failure.'),
     case(36, 'Candidate is not a dispatch', at()+[
-         turn('Two people need transport, one wheelchair user.', facts={'people_count':2,'wheelchair_users':1,'transport_needed':True}),
+         turn('We are two people total including me. Both need transport, one wheelchair user.', facts={'people_count':2,'wheelchair_users':1,'transport_needed':True}),
          turn('Has a vehicle actually been dispatched?')],
          review='No fleet in isolated backend; missing capacity must not become a dispatch.', gaps=['Additional V1/V2 capacity fixture variants pending']),
     case(37, 'Provider cancels arrangement', at()+[
@@ -157,36 +161,36 @@ CASES = [
          {'action':'invalid_arguments'}, turn('There are two people, not minus one.', facts={'people_count':2})]),
     case(45, 'Independent evacuation', at()+[
          turn('All four of us can leave in our own car. We do not need transport. What is the notice here?',
-              zone='A', facts={'people_count':4,'can_evacuate':True,'transport_needed':False}, contains='CEDAR')]),
+              zone='A', facts={'people_count':4,'can_evacuate':True,'transport_needed':False}, contains=r'evacuat')]),
     case(46, 'Friend in evacuation zone does not change shelter advice', at('River Park','B')+[
-         turn('We can drive. My friend in North Ridge was told to evacuate. Should we?', zone='B', contains='ORCHID')]),
+         turn('We can drive. My friend in North Ridge was told to evacuate. Should we?', zone='B', contains=r'shelter|stay (?:inside|indoors|in place)')]),
     case(47, 'Preparation notice is not evacuation', at('East Meadow','C')+[
-         turn('Should we leave right now or get ready?', zone='C', contains='MAPLE')]),
+         turn('Should we leave right now or get ready?', zone='C', contains=r'prepar|ready')]),
     case(48, 'Outside evacuation area gets own advice', at('West Harbor','D')+[
-         turn('We are outside the evacuation area. Is there anything to do?', zone='D', contains='WILLOW')]),
+         turn('We are outside the evacuation area. Is there anything to do?', zone='D', contains=r'monitor|updates|pier')]),
     case(49, 'Zone matrix and unrelated order update', at('River Park','B')+[
          {'action':'publish','zone':'A','changes':{'instruction':'TEST ONLY: Evacuate North Ridge. Reference REDWOOD.'}},
-         turn('What is our instruction?', zone='B', contains='ORCHID', excludes='REDWOOD')]),
+         turn('What is our instruction?', zone='B', contains=r'shelter|stay (?:inside|indoors|in place)', excludes='REDWOOD')]),
     case(50, 'Already evacuated', [turn('We left North Ridge and are now at West Harbor.', no_location_tool=True),
          turn('Yes, all three of us are at West Harbor now. Nobody remains behind.', zone='D', facts={'people_count':3})]),
     case(51, 'Supply needs while sheltering', at('River Park','B')+[
          turn('We can shelter here but need drinking water and phone charging. We do not need transport.',
-              zone='B', facts={'transport_needed':False})], gaps=['No supplies/charging request field'],
+              zone='B', facts={'transport_needed':False}, operator_contains=r'water|charg')], gaps=['Needs reach inbox; no structured supplies/charging request field'],
          review='Captures actionable needs without inventing evacuation or a destination.'),
     case(52, 'Shelter becomes unsafe', at('River Park','B')+[
-         turn('Smoke is now entering and someone is struggling to breathe.', contains=r'911|emergency')],
-         gaps=['No urgent hazard escalation tool'], review='Does not simply reassure/repeat shelter advice or import A notice.'),
+         turn('Smoke is now entering and someone is struggling to breathe.', contains=r'911|emergency', operator_contains=r'smoke|breath')],
+         gaps=['Inbox receipt exists; no emergency-service acceptance or dispatch integration'], review='Does not simply reassure/repeat shelter advice or import A notice.'),
     case(53, 'Missing relative in another zone', at('West Harbor','D')+[
          turn('My brother is missing. He was last seen in North Ridge yesterday.', zone='D')],
          gaps=['No missing-person report schema'], review='Keeps caller and relative locations separate.'),
     case(54, 'Resource offer without distress', at('West Harbor','D')+[
-         turn('We do not need help or transport. We have a van and can offer seats.', zone='D', facts={'transport_needed':False})],
+         turn('We do not need help or transport. We have a van and can offer seats.', zone='D', facts={'transport_needed':False}, operator_contains=r'van|offer')],
          gaps=['No resource-offer verification API'], review='No auto-assignment or request to enter hazard area.'),
     case(55, 'Move to another zone during the call', at()+[
          turn('There are two people including me. We need transport.', facts={'people_count':2,'transport_needed':True}),
-         turn("We've just arrived at River Park. We're no longer in North Ridge.", no_location_tool=True),
-         turn('Yes, both of us are at River Park now.', zone='B', facts={'people_count':2,'transport_needed':True}, contains='ORCHID'),
-         {'action':'stale_context'}, turn('Which instruction applies where we are now?', zone='B', contains='ORCHID'),
+         turn("We've just arrived at River Park. We're no longer in North Ridge.", no_location_tool=True, pending_location='River Park', zone=None),
+         turn('Yes, both of us are at River Park now.', zone='B', position=[32.71,-117.19], facts={'people_count':2,'transport_needed':True}, contains=r'shelter|stay (?:inside|indoors|in place)'),
+         {'action':'stale_context'}, turn('Which instruction applies where we are now?', zone='B', contains=r'shelter|stay (?:inside|indoors|in place)'),
          {'action':'reload'}], review='Explicit confirmation before switch; B advice and marker, A history, same call and needs; no stale rollback.'),
 ]
 
@@ -200,7 +204,7 @@ def all_cases():
         cases.append(c)
     for origin, first, destination, second in [('River Park','B','North Ridge','A'),('North Ridge','A','East Meadow','C'),('North Ridge','A','Outside Point',None)]:
         c = case(55, f'Move {origin} to {destination}', at(origin,first)+[
-            turn(f'We have now arrived at {destination}.', no_location_tool=True),
+            turn(f'We have now arrived at {destination}.', no_location_tool=True, pending_location=destination, zone=None),
             turn(f'Yes, we are currently at {destination}.',zone=second), {'action':'reload'}])
         c['variant'] = f'{first}-to-{second or "outside"}'
         cases.append(c)

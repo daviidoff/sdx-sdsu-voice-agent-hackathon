@@ -1,7 +1,11 @@
 import copy
+import errno
+import socket
 import json
 from pathlib import Path
 import unittest
+from unittest.mock import patch
+from urllib.error import URLError
 
 from disaster_crawler import DiscoveryRequest, discover
 from disaster_crawler.engine import plan
@@ -132,3 +136,20 @@ class OSMTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OSMTransportTests(unittest.TestCase):
+    def test_timeout_is_distinct_from_network_error(self):
+        for failure, code in [(TimeoutError(), 'osm_timeout'), (URLError(TimeoutError()), 'osm_timeout'), (URLError(ConnectionRefusedError(errno.ECONNREFUSED, 'refused')), 'osm_connection_refused'), (URLError(socket.gaierror(-2, 'no name')), 'osm_dns_error'), (URLError(OSError('network')), 'osm_network_error')]:
+            with patch('disaster_crawler.osm.build_opener') as opener:
+                opener.return_value.open.side_effect = failure
+                with self.assertRaises(ProviderError) as caught:
+                    OSMProvider()._http('bounded query', 1)
+                self.assertEqual(caught.exception.code, code)
+
+    def test_configured_endpoint_is_https_without_credentials(self):
+        with patch.dict('os.environ', {'OVERPASS_API_URL': 'https://example.org/api/interpreter'}):
+            self.assertEqual(OSMProvider().endpoint, 'https://example.org/api/interpreter')
+        for url in ('http://example.org/api', 'https://secret@example.org/api', 'https://example.org/api?token=secret'):
+            with patch.dict('os.environ', {'OVERPASS_API_URL': url}):
+                with self.assertRaises(ValueError): OSMProvider()

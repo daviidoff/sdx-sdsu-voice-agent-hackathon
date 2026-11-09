@@ -96,10 +96,12 @@ A site can expose a corporate switchboard, individual department numbers, or mul
 
 Berlin was a user-recognizable source-quality example, not the operational test region. The
 Contacts workspace defaults to San Diego, hides the Berlin report from its active contacts/map,
-and accepts bounded San Diego polygons. Existing stored evidence is retained.
+and searches selected published San Diego instruction zones. Existing stored evidence is retained.
 
 The root backend now owns durable `contact_searches`, `contact_sessions`, `contact_reports`, and
-`contact_reviews`. `POST /api/contacts/searches` starts bounded background discovery, reports actual
+`contact_reviews`. `POST /api/contacts/searches` accepts `zone_ids` and a provider, snapshots the
+published boundaries and versions, and starts one bounded background discovery over their union.
+The map and checklist support selecting one, several, or all instruction areas. It reports actual
 category/website worker progress, applies polygon filtering, and imports the report into the
 shared facility store. One discovery job runs at a time per local backend. An interrupted search
 is marked interrupted on restart, not silently completed. Cross-process global limits and remote
@@ -119,8 +121,51 @@ verification while preserving history. `GET /api/contacts/needs` is the source-a
 future coordination work, and the shared dashboard/voice context includes the same `reported_needs`. Every need is marked mock and needs review; dispatch and need markers
 are not implemented.
 
-Verified: drawing/search/approval UI; an actual Hillcrest OSM job yielded seven facilities inside
+Earlier verification: drawing/search/approval UI; an actual Hillcrest OSM job yielded seven facilities inside
 the polygon, four with a single phone; a real ElevenLabs connection produced audio and saved a
 mock two-person wheelchair-transport report through its tool into the database/needs feed.
 Physical microphone capture was not exercised by the automated smoke test. The browser's typed
 mode uses the same agent/tool route and has a regression test for persist-before-send ordering.
+
+
+### Instruction area search and network diagnosis (2026-11-08)
+
+Contacts now selects existing instruction areas; the separate contact drawing/demo-area controls
+are removed. Named areas without polygon boundaries are disabled. Tests cover disjoint unions,
+version snapshots, duplicate zone IDs, invalid/deleted areas and explicit provider failures/retries.
+The stored failed San Diego job had six `osm_network_error` tasks from a single shared Overpass
+request, lasting about 35 seconds. A direct reproduction also timed out; later probes returned
+connection refusal/HTTP 406. An alternative Private.coffee probe timed out too. This is an external
+availability limitation, not evidence that no facilities exist. No live failure is replaced with fixtures.
+
+Timeouts now have a distinct `osm_timeout` code. The UI and saved job retain provider diagnostics,
+including older runs on startup, and allow explicit retry. `OVERPASS_API_URL` can select an HTTPS
+Overpass endpoint; the endpoint used is saved in each discovery report. The default is unchanged.
+The User-Agent now includes the project's public repository for identification. Queries remain
+bounded and shared across categories, with no automatic retry storm or server hopping.
+See the [Overpass usage guidance](https://dev.overpass-api.de/overpass-doc/en/preface/commons.html)
+and [Private.coffee endpoint documentation](https://overpass.private.coffee/). Public endpoints
+are demo dependencies; production availability is not established by these tests.
+
+
+### Follow-up: exact cause of the 15:59:52 search failure
+
+The screenshot corresponds to search `c003e3d2-222e-4453-8cf6-c25f83fe901a`, run
+`822bb80e-e8e3-4db1-b22a-3c38251936a2`. It failed after 0.39 seconds with the old
+`osm_network_error` code. Direct TCP and curl checks from this machine resolve both
+`overpass-api.de` addresses but receive connection refusal on port 443 before TLS or HTTP.
+Other public HTTPS hosts connect. This isolates the failure to connectivity to that endpoint;
+it is not caused by polygon geometry, query size, phone extraction or saving to the database.
+Whether the refusal is a provider/network block or outage is not established.
+
+The alternate Private.coffee endpoint accepts TCP and verifies TLS but sends no HTTP response
+within 15 seconds even for `/api/status`. The VK Maps Overpass endpoint initially failed certificate
+validation: this Python installation has zero default roots and our fallback chose the older
+macOS `/etc/ssl/cert.pem`. Using the project's pinned Certifi bundle verifies the certificate;
+the same bounded query then receives HTTP 504. No alternative was configured as working.
+
+The TLS fallback now prefers Certifi when Python has no roots, while preserving configured
+trust stores and full certificate/hostname verification. Connection refusal and DNS failure now
+have distinct persisted error codes. Search failures are shown directly on history cards, and
+the selected search's diagnostic/progress panel appears before history rather than below it.
+A failed search says no results were received, instead of implying there are zero contacts.

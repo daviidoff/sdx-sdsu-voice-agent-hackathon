@@ -7,13 +7,14 @@ import asyncio
 from datetime import datetime, timezone
 import hashlib
 import json
+import logging
 import os
 from typing import Literal
 from uuid import uuid4
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 from app.discovery import Report, facilities, save_report
 from app.geography import point_in_polygon
 
@@ -27,6 +28,14 @@ def now():
 def initialize(db):
     for table in ('contact_searches', 'contact_sessions', 'contact_reports', 'contact_reviews'):
         db.execute(f'CREATE TABLE IF NOT EXISTS {table} (id TEXT PRIMARY KEY, data TEXT NOT NULL)')
+    # Recover diagnostics for searches saved before errors were shown in Contacts.
+    for job in rows(db, 'contact_searches'):
+        if job.get('run_id') and 'error_codes' not in job:
+            row = db.execute('SELECT data FROM discovery_runs WHERE run_id=?', (job['run_id'],)).fetchone()
+            if row:
+                codes = sorted({t['error_code'] for t in json.loads(row['data'])['tasks'] if t.get('error_code')})
+                job.update(error_codes=codes, error=search_error(codes))
+                put(db, 'contact_searches', job)
     # Explicitly interrupt unfinished work; a restart is never a successful call.
     for job in rows(db, 'contact_searches'):
         if job['status'] in ('queued', 'running'):
@@ -64,20 +73,43 @@ class Search(BaseModel):
     id: str = Field(min_length=1, max_length=100)
     label: str = Field(default='San Diego contact search', min_length=1, max_length=150)
     provider: Literal['osm', 'mock'] = 'osm'
-    polygon: list[tuple[float, float]] = Field(min_length=3, max_length=100)
+    zone_ids: list[str] = Field(min_length=1, max_length=100)
 
-    @model_validator(mode='after')
-    def valid_area(self):
-        # This dashboard is scoped to the user's San Diego test incident.
-        if any(not (32.45 <= lat <= 33.2 and -117.65 <= lng <= -116.7) for lat, lng in self.polygon):
-            raise ValueError('Draw the contact area in San Diego (32.45–33.2 N, 117.65–116.7 W).')
-        origin = self.polygon[0]
-        area = sum((a[1]-origin[1])*(b[0]-origin[0])-(b[1]-origin[1])*(a[0]-origin[0]) for a,b in zip(self.polygon, self.polygon[1:]+self.polygon[:1]))
+
+def search_zones(db, identifiers):
+    """Resolve current published boundaries once; retain their versions as evidence."""
+    from app.dashboard import zones
+    published = {z['id']: z for z in zones(db)}
+    selected = []
+    for identifier in dict.fromkeys(identifiers):
+        zone = published.get(identifier)
+        if not zone:
+            raise HTTPException(422, 'An instruction area was deleted or is not published. Refresh and select again.')
+        points = zone.get('polygon', [])
+        if len(points) < 3:
+            raise HTTPException(422, f"{zone['label']} needs a published map boundary before contact search.")
+        if any(not (32.45 <= lat <= 33.2 and -117.65 <= lng <= -116.7) for lat, lng in points):
+            raise HTTPException(422, f"{zone['label']} is outside the San Diego test region.")
+        origin = points[0]
+        area = sum((a[1]-origin[1])*(b[0]-origin[0])-(b[1]-origin[1])*(a[0]-origin[0]) for a,b in zip(points, points[1:]+points[:1]))
         if abs(area) < 1e-10:
-            raise ValueError('Draw a nonempty polygon')
-        if max(p[0] for p in self.polygon)-min(p[0] for p in self.polygon) > .25 or max(p[1] for p in self.polygon)-min(p[1] for p in self.polygon) > .25:
-            raise ValueError('Use an area smaller than 0.25 degrees per side for this bounded search.')
-        return self
+            raise HTTPException(422, f"{zone['label']} needs a nonempty map boundary.")
+        selected.append(zone)
+    return selected
+
+
+def search_error(codes):
+    if not codes:
+        return None
+    if 'osm_connection_refused' in codes:
+        return 'The OpenStreetMap discovery server refused the connection. The areas were not searched; this does not mean there are no contacts. Retry when the service is reachable.'
+    if 'osm_dns_error' in codes:
+        return 'The OpenStreetMap discovery server could not be found (DNS lookup failed). The areas were not searched.'
+    if 'osm_tls_certificate_error' in codes:
+        return 'The OpenStreetMap discovery server certificate could not be verified (osm_tls_certificate_error). The areas were not searched.'
+    if any(c in ('osm_network_error', 'osm_timeout', 'osm_http_406', 'osm_http_429', 'osm_http_502', 'osm_http_503', 'osm_http_504') for c in codes):
+        return 'OpenStreetMap could not complete the request (network timeout or service busy). Retry these instruction areas after a short wait. Existing contacts are retained.'
+    return 'Discovery could not complete all searches: ' + ', '.join(codes) + '. Existing contacts are retained.'
 
 
 def launch(app, coroutine, name):
@@ -106,25 +138,32 @@ async def run_search(app, body: Search):
         if not loop.is_closed():
             loop.call_soon_threadsafe(update, item)
     try:
+        polygons = [z['polygon'] for z in job['zones']]
+        points = [p for polygon in polygons for p in polygon]
         request = DiscoveryRequest.from_dict({'incident_id': 'san-diego-demo', 'locations': ['San Diego, California, USA'],
             'categories': list(CATEGORIES), 'country_code': 'US', 'sources': ['osm'] if body.provider == 'osm' else ['maps', 'web'],
-            'bounds': [min(p[1] for p in body.polygon), min(p[0] for p in body.polygon), max(p[1] for p in body.polygon), max(p[0] for p in body.polygon)],
+            'bounds': [min(p[1] for p in points), min(p[0] for p in points), max(p[1] for p in points), max(p[0] for p in points)],
             'max_tasks': 12, 'max_results_per_task': 50, 'max_leads': 100, 'concurrency': 3, 'task_timeout_seconds': 40,
             'enrich_websites': body.provider == 'osm', 'max_websites': 10})
-        result = await asyncio.to_thread(discover, request, OSMProvider() if body.provider == 'osm' else MockProvider(), progress)
+        provider = OSMProvider() if body.provider == 'osm' else MockProvider()
+        result = await asyncio.to_thread(discover, request, provider, progress)
+        if body.provider == 'osm':
+            result['request']['overpass_endpoint'] = provider.endpoint
         # Overpass uses the polygon's bounding rectangle. Filter final results by the actual polygon.
-        outside = [l for l in result['leads'] if not l['coordinates'] or not point_in_polygon((l['coordinates']['lat'], l['coordinates']['lng']), body.polygon)]
+        outside = [l for l in result['leads'] if not l['coordinates'] or not any(point_in_polygon((l['coordinates']['lat'], l['coordinates']['lng']), polygon) for polygon in polygons)]
         result['leads'] = [l for l in result['leads'] if l not in outside]
         result['summary'].update(leads_returned=len(result['leads']), leads_with_phone=sum(bool(l['phone']) for l in result['leads']), polygon_excluded=len(outside))
-        result['request']['search_polygon'] = body.polygon
+        result['request']['instruction_zones'] = job['zones']
         save_report(db, Report.model_validate(result))
         ids = [f['id'] for f in facilities(db) if f['run_id'] == result['run_id']]
-        job.update(status=result['status'], run_id=result['run_id'], facility_ids=ids, summary=result['summary'],
+        codes = sorted({t['error_code'] for t in result['tasks'] if t.get('error_code')})
+        job.update(status=result['status'], error=search_error(codes), error_codes=codes, run_id=result['run_id'], facility_ids=ids, summary=result['summary'],
                    website_enrichment=result.get('website_enrichment'), finished_at=now())
     except asyncio.CancelledError:
         job.update(status='interrupted', finished_at=now())
         raise
     except Exception:
+        logging.getLogger(__name__).exception('Contact search %s failed', body.id)
         job.update(status='failed', error='Search failed. Retry the bounded search; existing contacts are retained.', finished_at=now())
     finally:
         put(db, 'contact_searches', job)
@@ -140,7 +179,9 @@ async def search(body: Search, request: Request):
         return existing
     if any(j['status'] in ('queued', 'running') for j in rows(db, 'contact_searches')):
         raise HTTPException(409, 'A search is already running. Wait for it to finish.')
-    job = {'id': body.id, 'label': body.label, 'provider': body.provider, 'polygon': body.polygon, 'request': body.model_dump(mode='json'),
+    selected = search_zones(db, body.zone_ids)
+    job = {'id': body.id, 'label': body.label, 'provider': body.provider, 'zone_ids': [z['id'] for z in selected],
+           'zones': selected, 'request': body.model_dump(mode='json'),
            'status': 'queued', 'created_at': now(), 'workers': {}, 'facility_ids': []}
     put(db, 'contact_searches', job)
     launch(request.app, run_search(request.app, body), 'contact-search-'+body.id)
@@ -183,6 +224,64 @@ async def approve(facility_id: str, body: Approval, request: Request):
         'approved_at': now(), 'created_at': now(), 'transcript': [], 'identity_status': 'unconfirmed'}
     put(db, 'contact_sessions', session)
     return session
+
+
+@router.post('/{facility_id}/demo-call')
+async def demo_call(facility_id: str, request: Request):
+    """Open one browser role-play. A public phone number is not needed or dialed."""
+    db = request.app.state.db
+    f = facility(db, facility_id)
+    existing = next((s for s in rows(db, 'contact_sessions') if s['facility_id'] == facility_id
+                     and s['status'] not in ('completed', 'cancelled', 'failed', 'interrupted')), None)
+    if existing:
+        if existing['status'] != 'approved':
+            raise HTTPException(409, 'This facility already has an active call. End it before starting another.')
+        return existing
+    session = {'id': str(uuid4()), 'facility_id': facility_id, 'facility_name': f['name'],
+               'incident_id': 'san-diego-demo', 'phone': '', 'facility_snapshot': f,
+               'status': 'approved', 'mode': 'browser_mock', 'mock': True,
+               'approved_at': now(), 'created_at': now(), 'transcript': [], 'identity_status': 'unconfirmed'}
+    put(db, 'contact_sessions', session)
+    return session
+
+
+@router.get('/{facility_id}/demo-call')
+async def demo_call_info(facility_id: str, request: Request):
+    from app.outreach_agent import agent_id
+    f = facility(request.app.state.db, facility_id)
+    try:
+        configured = bool(agent_id() and os.getenv('ELEVENLABS_API_KEY'))
+    except (RuntimeError, ValueError, OSError):
+        configured = False
+    return {'id': f['id'], 'name': f['name'], 'voice_configured': configured}
+
+
+@router.get('/sessions/{session_id}')
+async def read_session(session_id: str, request: Request):
+    return get(request.app.state.db, 'contact_sessions', session_id)
+
+
+@router.get('/sessions/{session_id}/context')
+async def clinic_context(session_id: str, request: Request):
+    from app.dashboard import instruction_for
+    db = request.app.state.db
+    session = get(db, 'contact_sessions', session_id)
+    f = session['facility_snapshot']
+    location = f.get('address') or f['name']
+    resolution = None
+    if f.get('latitude') is not None and f.get('longitude') is not None:
+        resolution = {'status': 'resolved', 'query': location,
+                      'lat': f['latitude'], 'lng': f['longitude'], 'source': 'crawler_listing'}
+    instruction = instruction_for(db, location, resolution)
+    # Conflicting instructions are for the operator to resolve, not a menu for the agent.
+    if instruction['action'] == 'unknown':
+        instruction.pop('matching_zones', None)
+    return {'mock': True, 'as_of': now(), 'facility_name': f['name'], 'listed_address': f.get('address'),
+            'location_confirmation_required': True, 'instruction': instruction,
+            'notice': 'Demo exercise. Guidance is based on the listed location, not verified patient locations. '
+                      'Confirm the clinic is at this address before relaying it. If the location differs, '
+                      'record the correction for operator review; do not apply this instruction. '
+                      'Never invent disaster details, routes, or dispatched help.'}
 
 
 class Utterance(BaseModel):
@@ -354,8 +453,13 @@ async def voice(session_id: str, request: Request, response: Response):
             result = await client.get('https://api.elevenlabs.io/v1/convai/conversation/get-signed-url',
                 params={'agent_id': identifier}, headers={'xi-api-key': os.getenv('ELEVENLABS_API_KEY', '')})
             result.raise_for_status()
+        session = get(db, 'contact_sessions', session_id)
+        if session['status'] != 'connecting':
+            raise HTTPException(409, 'Demo call was cancelled while connecting')
         return {'signed_url': result.json()['signed_url'], 'session': session,
                 'dynamic_variables': {'facility_name': session['facility_name'], 'facility_address': session['facility_snapshot'].get('address') or 'not confirmed'}}
     except (httpx.HTTPError, ValueError, KeyError, RuntimeError):
-        session.update(status='failed', ended_at=now()); put(db, 'contact_sessions', session)
-        raise HTTPException(503, 'Outreach voice unavailable. Configure the dedicated outreach agent or use a scripted mock call.') from None
+        session = get(db, 'contact_sessions', session_id)
+        if session['status'] == 'connecting':
+            session.update(status='failed', ended_at=now()); put(db, 'contact_sessions', session)
+        raise HTTPException(503, 'Outreach voice unavailable. Configure the dedicated outreach agent and start a new Demo Clinic Call.') from None

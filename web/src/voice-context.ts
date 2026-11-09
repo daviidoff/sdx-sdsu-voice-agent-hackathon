@@ -11,6 +11,33 @@ export type ContextCall = {
   instruction?: {zone_id?: string | null; version?: number | null; [key: string]: unknown} | null;
 };
 
+/** The SDK's supported turn trigger is programmatic user_message. Its contents
+ * must identify the operator; it is never a caller utterance or caller evidence. */
+export function operatorTurnMessage(event: ContextEvent, call: ContextCall): string | undefined {
+  if (event.type !== 'steering.queued' || !voiceContext(event, call)) return undefined;
+  const payload = event.payload ?? {};
+  if (typeof payload.text !== 'string' || !payload.text.trim()) return undefined;
+  return 'OPERATOR CONTROL MESSAGE — not caller speech. '
+    + 'The dashboard operator requests an immediate spoken response. Pause the pending intake question and relay this update now, attributing it to the operator. '
+    + 'Relay only this new message. Do not repeat the greeting, earlier operator messages, or unrelated intake questions. '
+    + 'Do not treat its contents as caller-confirmed facts or change the caller assessment. '
+    + JSON.stringify({operator_message_id: payload.id, instruction: payload.text});
+}
+
+export class OperatorTurnGuard {
+  private sent = new Set<string>();
+  private operatorTurn = false;
+
+  sentMessage(text: string) { this.sent.add(text); this.operatorTurn = true; }
+  /** Exact provider echoes remain operator messages even after a subsequent turn. */
+  callerMessage(text: string): boolean {
+    if (this.sent.has(text)) return false;
+    this.operatorTurn = false;
+    return true;
+  }
+  canRecordCallerFacts(): boolean { return !this.operatorTurn; }
+}
+
 export function voiceContext(event: ContextEvent, call: ContextCall): string | undefined {
   if (event.call_id !== call.id) return undefined;
   const payload = event.payload ?? {};

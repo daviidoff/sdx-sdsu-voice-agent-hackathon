@@ -81,7 +81,14 @@ class Sandbox:
                 self.fault = None
                 entry['result'] = {'error': 'Test-injected write rejected before commit; not saved.'}
                 return entry['result'], True
-            if name == 'confirm_location':
+            if name == 'message_operator':
+                result = self.api(path+'/operator-messages', parameters)
+            elif name == 'check_operator_messages':
+                result = self.api(path+'/operator-messages')
+            elif name == 'propose_location':
+                call = self.api(path+'/location-proposal', {'location': parameters['location']})
+                result = {key: call.get(key) for key in ('assessment','instruction','status','revision','pending_location')}
+            elif name == 'confirm_location':
                 result = self.api(path+'/resolve', {'location': parameters['location']})
             elif name in {'update_assessment', 'request_assistance'}:
                 body = {**parameters, **({'transport_needed': True} if name == 'request_assistance' else {})}

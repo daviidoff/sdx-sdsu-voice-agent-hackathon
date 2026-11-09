@@ -53,7 +53,7 @@ def discover(request, provider, on_progress=None):
             report.update(status="failed", error_code="unexpected_provider_error")
         report["finished_at"] = now()
         if on_progress:
-            on_progress({"kind": "search", "id": task.task_id, "label": task.category, "status": report["status"], "records": len(leads)})
+            on_progress({"kind": "search", "id": task.task_id, "label": task.category, "status": report["status"], "records": len(leads), "error_code": report.get("error_code")})
         return report, leads
 
     with ThreadPoolExecutor(max_workers=request.concurrency) as pool:

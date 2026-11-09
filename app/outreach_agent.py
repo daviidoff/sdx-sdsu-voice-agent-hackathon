@@ -8,7 +8,16 @@ PROMPT = '''You are EmergencyOS, conducting an explicitly MOCK disaster-response
 The human is role-playing reception at {{facility_name}}. Listed address: {{facility_address}} (unverified).
 This is a browser simulation: no real institution or phone number has been called. Say this briefly at the start.
 Ask whether you have reception and confirm the facility/location. Ask one natural question at a time.
-Ask whether anyone needs assistance, how many people, what help, where they are, urgency, and whether reception can relay information.
+FIRST ask: What is the situation at the clinic right now? Listen before giving a briefing or continuing a checklist.
+Then ask whether any patients, staff, or other people they know about need help. Follow up on reported needs:
+how many people, mobility or accessible transport, essential supplies or power, where they are, urgency,
+and whether clinic staff can relay information. Ask only relevant follow-ups; do not repeat answered questions.
+AFTER understanding the clinic's situation, call get_clinic_context for the current operator-published exercise instruction.
+Explain the known situation and what the clinic should do using only that result, then ask whether they can carry it out
+and what support is missing. Always fetch context again before repeating guidance or answering a question about changed instructions.
+The mapped address is a public listing, not a confirmed patient location. Confirm the clinic's listed address before applying guidance.
+If the address differs, guidance is unknown, or zones conflict, explain that the coordinator must clarify; do not invent an order.
+Do not invent a fire, flood, evacuation, road closure, or available resources when the context does not supply it.
 Respond to questions and corrections before continuing intake. Never assume identity, needs, numbers, safety, capacity, vehicles, or commitments.
 Do not collect unnecessary personal names of patients/residents. Use group-level details. The receptionist name is optional.
 After a substantive answer, call record_contact_report with a concise cumulative summary and needs. Use exact receiver words as source_quote; never invent a quote.
@@ -35,10 +44,16 @@ def agent_id():
     return identifier
 
 
-def configuration(tool_id):
+CONTEXT_TOOL = {'tool_config': {'type': 'client', 'name': 'get_clinic_context',
+    'description': 'Read the current operator instruction for the clinic listing. Fetch before explaining guidance. Confirm the listed address with the receiver; never apply it at a different location.',
+    'expects_response': True, 'response_timeout_secs': 15,
+    'parameters': {'type': 'object', 'properties': {}, 'required': []}}}
+
+
+def configuration(tool_id, context_tool_id=None):
     return {'name': 'EmergencyOS — mock reception outreach', 'conversation_config': {
         'agent': {'first_message': 'Hello, this is EmergencyOS calling in a mock disaster-response exercise. Am I speaking with reception at {{facility_name}}?',
-                  'language': 'en', 'prompt': {'prompt': PROMPT, 'tool_ids': [tool_id]},
+                  'language': 'en', 'prompt': {'prompt': PROMPT, 'tool_ids': [tool_id] + ([context_tool_id] if context_tool_id else [])},
                   'dynamic_variables': {'dynamic_variable_placeholders': {'facility_name': 'the test facility', 'facility_address': 'not confirmed'}}},
         'conversation': {'max_duration_seconds': 600, 'client_events': ['audio', 'interruption', 'user_transcript', 'agent_response', 'agent_response_correction', 'client_tool_call']}},
         'platform_settings': {'auth': {'enable_auth': True}}}

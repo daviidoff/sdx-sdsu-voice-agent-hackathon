@@ -34,6 +34,7 @@ class TextAgent:
         self.audio_events = 0
         self.context_ids = set()
         self.last_sync = 0
+        self.operator_turn = False
 
     def send(self, payload):
         self.connection.send(json.dumps(payload))
@@ -71,9 +72,23 @@ class TextAgent:
                 self.context(text)
 
     def utter(self, text):
+        self.operator_turn = False
         self.sandbox.transcript('user', text)
         self.messages.append({'role': 'caller', 'text': text})
         self.send({'type': 'user_message', 'text': text})
+        return self.receive_turn()
+
+    def operator_message(self, event):
+        result = subprocess.run(['node',str(ROOT/'evaluation/context.mjs')],
+                                input=json.dumps({'events':[event],'call':self.sandbox.call(),'mode':'operator'}),capture_output=True,text=True,check=True)
+        text = json.loads(result.stdout)[0]
+        self.context_ids.add(event['id'])
+        if text is None:
+            raise AgentError('Operator event was not applicable to this call')
+        self.operator_turn = True
+        self.messages.append({'role':'operator','text':text})
+        self.send({'type':'user_message','text':text})
+        self.sandbox.api(f'/api/calls/{self.sandbox.call_id}/steering/{event["id"]}/ack',{'status':'response_requested'})
         return self.receive_turn()
 
     def handle(self, message):
@@ -107,7 +122,13 @@ class TextAgent:
             tool = message['client_tool_call']
             tool_id = tool['tool_call_id']
             if tool_id not in self.seen_tools:
-                result, error = self.sandbox.tool(tool['tool_name'], tool.get('parameters') or {})
+                name, parameters = tool['tool_name'], tool.get('parameters') or {}
+                blocked = self.operator_turn and (name in {'propose_location','update_assessment','request_assistance'} or (name=='confirm_location' and parameters.get('location')!=self.sandbox.call()['assessment'].get('location')))
+                if blocked:
+                    result, error = {'error':'Operator messages are not caller-confirmed facts.'}, True
+                    self.sandbox.trace.append({'name':name,'arguments':parameters,'success':False,'result':result})
+                else:
+                    result, error = self.sandbox.tool(name, parameters)
                 self.seen_tools[tool_id] = {'type': 'client_tool_result', 'tool_call_id': tool_id,
                                             'result': json.dumps(result), 'is_error': error}
             self.send(self.seen_tools[tool_id])
@@ -119,9 +140,7 @@ class TextAgent:
     def receive_turn(self):
         deadline = time.monotonic()+self.timeout
         before = len(self.messages)
-        last = time.monotonic()
-        # A response is complete only after a final agent_response, not a tool preamble.
-        response_since_tool = False
+        # Provider completion covers tool chains; idle gaps do not prove completion.
         while time.monotonic() < deadline:
             if time.monotonic()-self.last_sync > .5:
                 self.sync_context()
@@ -131,16 +150,10 @@ class TextAgent:
                 if not raw:
                     raise AgentError('Connection closed before response completed')
                 kind = self.handle(json.loads(raw))
-                if kind == 'client_tool_call':
-                    response_since_tool = False
-                if kind == 'agent_response':
-                    response_since_tool = True
-                if kind in {'agent_response', 'client_tool_call', 'agent_response_correction', 'agent_chat_response_part'}:
-                    last = time.monotonic()
+                if kind == 'agent_response_complete':
+                    return [m['text'] for m in self.messages[before:] if m['role']=='agent']
             except websocket.WebSocketTimeoutException:
                 pass
-            if response_since_tool and time.monotonic()-last >= .8:
-                return [m['text'] for m in self.messages[before:] if m['role']=='agent']
         raise AgentError('Timed out awaiting complete text response')
 
     def close(self):

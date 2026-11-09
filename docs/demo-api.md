@@ -10,6 +10,8 @@ Run `./scripts/run-demo.sh` from the repository root. The interface is on `http:
 
 | Method and path | Input / purpose |
 | --- | --- |
+| `POST /api/contacts/{facility_id}/demo-call` | Opens a manual browser role-play for a crawler facility. No phone number required or dialed. Reuses an unstarted session; rejects a duplicate active call. |
+| `GET /api/contacts/sessions/{session_id}/context` | Current published guidance for the listed clinic location, fetched by the outreach agent's `get_clinic_context` client tool. Location confirmation is required; conflicting guidance returns unknown. |
 | `GET /api/config` | Provider configuration booleans and public agent ID; never API keys. |
 | `GET /api/scenarios` | Synthetic scenarios and their fixture locations. |
 | `POST /api/calls` | `{mode: "simulation" or "elevenlabs", scenario_id}` creates a call. |
@@ -45,7 +47,7 @@ Every SSE message has `{id, call_id, type, payload, created_at}`. The `id` is a 
 - `operator.requested` (saved agent/backend request), `operator.read` (operator read watermark)
 - `job.started`, `job.completed`, `job.failed`, `job.discarded`
 
-The browser forwards steering, instruction changes, and completed worker results through the active ElevenLabs SDK conversation. A context-delivered acknowledgement does not mean the assistant has spoken it. Disconnected voice clients cannot apply steering. A changed location, fact set, or instruction invalidates an older worker result. Job events include the snapshot `revision`; clients compare it with the current call revision before treating a result as current. Discarded jobs also identify `current_revision`.
+The browser forwards steering, instruction changes, and completed worker results through the active ElevenLabs SDK conversation. Explicit steering also sends an operator-attributed response trigger. The `/steering/{event_id}/ack` status progresses from `context_delivered` to `response_requested` idempotently; neither status claims the caller heard it. Operator-trigger echoes are excluded from caller transcript and cannot populate caller assessment. Disconnected voice clients cannot apply steering. A changed location, fact set, or instruction invalidates an older worker result. Job events include the snapshot `revision`; clients compare it with the current call revision before treating a result as current. Discarded jobs also identify `current_revision`.
 
 Simulation asks for yes/no confirmation of `pending_location` before resolving an instruction. A simulated operator question sets `pending_operator_question`; its answer is recorded separately and normal intake resumes. In live mode the model obtains confirmation before invoking the location tool. Transcript corrections update the original segment and emit `transcript.corrected` referencing its event ID; clients refresh their snapshot rather than appending a duplicate utterance. A fully interrupted segment may be replaced with an empty string.
 

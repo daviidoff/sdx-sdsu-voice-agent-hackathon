@@ -61,6 +61,65 @@ def test_zone_move_preserves_needs_and_history():
         assert any((e['payload'] or {}).get('zone_id')=='A' for e in state['events'] if e['type']=='instruction.updated')
 
 
+def test_pending_move_clears_old_guidance_preserves_needs_and_rejects_mismatch():
+    with Sandbox() as s:
+        s.tool('confirm_location',{'location':'North Ridge'})
+        s.tool('update_assessment',{'people_count':2,'transport_needed':True})
+        old = s.call()
+        s.tool('propose_location',{'location':'River Park'})
+        pending = s.call()
+        assert pending['pending_location']=='River Park'
+        assert pending['instruction'] is None
+        assert pending['assessment'].get('location_resolution') is None
+        assert pending['assessment'].get('location') is None
+        assert pending['revision']>old['revision']
+        _, error=s.tool('confirm_location',{'location':'North Ridge'})
+        assert error and s.call()['pending_location']=='River Park'
+        _, error=s.tool('confirm_location',{'location':'River Park'})
+        assert error  # Even the correct place cannot be confirmed in the proposal turn.
+        s.transcript('user','Yes, River Park is where we are now.')
+        s.tool('confirm_location',{'location':'River Park'})
+        assert s.call()['instruction']['zone_id']=='B'
+        assert not s.call().get('pending_location')
+        assert s.call()['assessment']['people_count']==2
+        assert s.call()['assessment']['transport_needed'] is True
+
+
+def test_operator_bridge_receipt_idempotency_and_fact_guard():
+    with Sandbox() as s:
+        result,error=s.tool('message_operator',{'text':'Needs water','request_id':'need-water'})
+        assert not error and result['status']=='received'
+        s.tool('message_operator',{'text':'Needs water','request_id':'need-water'})
+        inbox,error=s.tool('check_operator_messages',{})
+        assert not error and len(inbox['messages'])==1
+        agent=TextAgent('unused','unused',s)
+        agent.send=lambda value:None
+        agent.sync_context=lambda:None
+        agent.operator_turn=True
+        agent.handle({'type':'client_tool_call','client_tool_call':{'tool_call_id':'operator-fact','tool_name':'update_assessment','parameters':{'people_count':99}}})
+        assert s.call()['assessment'].get('people_count') is None
+        assert not s.trace[-1]['success']
+
+
+def test_turn_waits_for_explicit_completion_after_tool_chain():
+    with Sandbox() as s:
+        agent=TextAgent('unused','unused',s)
+        agent.send=lambda value:None
+        agent.sync_context=lambda:None
+        messages=iter([
+            {'type':'agent_response','agent_response_event':{'agent_response':'I will record that.'}},
+            {'type':'client_tool_call','client_tool_call':{'tool_call_id':'save','tool_name':'update_assessment','parameters':{'people_count':2}}},
+            {'type':'agent_response','agent_response_event':{'agent_response':'Recorded two people.'}},
+            {'type':'agent_response_complete','agent_response_complete_event':{'event_id':4}},
+        ])
+        class Socket:
+            def recv(self):
+                return json.dumps(next(messages))
+        agent.connection=Socket()
+        assert agent.receive_turn()==['I will record that.','Recorded two people.']
+        assert s.call()['assessment']['people_count']==2
+
+
 def test_evaluator_fails_wrong_zone_missing_facts_and_premature_confirmation():
     with Sandbox() as s:
         s.tool('confirm_location',{'location':'North Ridge'})

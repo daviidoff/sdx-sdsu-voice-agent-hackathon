@@ -1,13 +1,14 @@
-import type { Call, Feed, FeedEvent, TranscriptLine, Zone, Facility, DiscoveryDetails } from '@/types'
+import type { Call, Feed, FeedEvent, TranscriptLine, Zone, Facility, DiscoveryDetails, LocationResolution } from '@/types'
 
 export interface BackendEvent {
   id: string; call_id: string; type: string; payload: Record<string, unknown> | null; created_at: string
 }
 export interface BackendCall {
+  pending_location?: string
   revision: number
   id: string; status: string; mode: string; scenario_id: string; created_at: string; ended_at?: string
   assessment: { location?: string; people_count?: number | null; can_evacuate?: boolean | null; transport_needed?: boolean | null; mobility_needs?: string | null; wheelchair_users?: number | null
-    location_resolution?: { status: string; query?: string; message?: string; lat?: number; lng?: number; display_name?: string; source?: string; source_url?: string; precision?: string; resolved_at?: string }
+    location_resolution?: LocationResolution
   }
   instruction?: { zone_id?: string; text?: string; version?: number; source?: string; match_status?: string
     matching_zones?: { id: string; label: string; action: string; text: string; version: number }[] }
@@ -15,6 +16,7 @@ export interface BackendCall {
   events: BackendEvent[]
 }
 export interface Snapshot {
+  fires?: import('../types').SimulatedFire[]
   contact_workflow?: import('./contacts').ContactWorkflow
   calls: BackendCall[]; zones: Zone[]; facilities: Record<string, unknown>[]
   incidents: Record<string, unknown>[]; routes: Record<string, unknown>[]; updated_at: string
@@ -34,10 +36,10 @@ export async function api<T>(path: string, body?: unknown, signal?: AbortSignal,
 export function toCall(raw: BackendCall): Call {
   const a = raw.assessment
   const location = a.location_resolution
-  const mapped = location?.status === 'resolved' && (!location.query || location.query === a.location) && Number.isFinite(location.lat) && Number.isFinite(location.lng) && Math.abs(location.lat!) <= 90 && Math.abs(location.lng!) <= 180
+  const mapped = !raw.pending_location && location?.status === 'resolved' && (!location.query || location.query === a.location) && Number.isFinite(location.lat) && Number.isFinite(location.lng) && Math.abs(location.lat!) <= 90 && Math.abs(location.lng!) <= 180
   const ended = raw.ended_at ?? raw.events.findLast((e) => e.type === 'call.ended')?.created_at
   return { id: raw.id, callerName: `${raw.mode === 'elevenlabs' ? 'Voice' : 'Simulation'} · ${raw.id.slice(0, 8)}`,
-    phone: 'Browser call', address: a.location || 'Location not confirmed', locationQuery: a.location || undefined, position: mapped ? [location!.lat!, location!.lng!] : undefined,
+    phone: 'Browser call', address: raw.pending_location ? `Confirmation pending: ${raw.pending_location}` : a.location || 'Location not confirmed', locationQuery: a.location || undefined, position: mapped ? [location!.lat!, location!.lng!] : undefined,
     people: a.people_count ?? null, situation: a.transport_needed === true || a.can_evacuate === false ? 'needs_help' : a.can_evacuate === true ? 'can_leave' : 'unknown',
     mobility: a.mobility_needs || 'Mobility needs not confirmed', status: raw.status === 'ended' ? 'ended' : 'active',
     startedAt: Date.parse(raw.created_at), endedAt: ended ? Date.parse(ended) : undefined, transportNeeded: a.transport_needed ?? undefined, canEvacuate: a.can_evacuate ?? undefined, instruction: raw.instruction, mode: raw.mode,
@@ -52,7 +54,7 @@ export function toLines(raw: BackendCall): TranscriptLine[] {
     if (e.type === 'transcript') { speaker = p.role === 'user' ? 'caller' : 'agent'; text = String(p.text ?? '') }
     else if (e.type === 'steering.queued') { speaker = 'steer'; text = `Queued: ${p.text}` }
     else if (e.type === 'operator.requested') { text = `Sent to operator inbox: ${p.text}` }
-    else if (e.type === 'steering.acknowledged') text = 'Operator message delivered to agent context; spoken acknowledgement unconfirmed.'
+    else if (e.type === 'steering.acknowledged') text = p.status === 'response_requested' ? 'Operator message sent; immediate voice response requested. Caller hearing unconfirmed.' : 'Operator message delivered to agent context; spoken acknowledgement unconfirmed.'
     else if (e.type === 'instruction.updated') text = e.payload ? `Instruction v${p.version ?? '—'}: ${p.text}` : 'Previous instruction cleared.'
     else if (e.type === 'call.ended') text = 'Call ended. Assistance outcome remains unconfirmed.'
     else if (e.type === 'job.started') text = 'Background analysis started.'
@@ -107,7 +109,7 @@ export function createFeed(): Feed {
       return () => { stopped = true; controller.abort(); clearTimeout(timer) }
     },
     async steer(callId, text, mode) {
-      await api(`/api/calls/${encodeURIComponent(callId)}/steering`, { text: mode === 'say' ? `At the next appropriate opportunity, tell the caller: ${text}` : text })
+      await api(`/api/calls/${encodeURIComponent(callId)}/steering`, { text: mode === 'say' ? `Tell the caller immediately: ${text}` : text })
     },
   }
 }

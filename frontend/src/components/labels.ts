@@ -1,10 +1,10 @@
 import type { Call, Responder } from '@/types'
 
 export const SITUATION: Record<Call['situation'], { label: string; color: string; badge: string }> = {
-  unknown: { label: 'Needs unconfirmed', color: '#64748b', badge: 'bg-slate-500 text-white' },
-  trapped: { label: 'Trapped', color: '#dc2626', badge: 'bg-red-600 text-white' },
-  needs_help: { label: 'Needs help', color: '#d97706', badge: 'bg-amber-500 text-white' },
-  can_leave: { label: 'Can leave', color: '#16a34a', badge: 'bg-green-600 text-white' },
+  unknown: { label: 'Needs unconfirmed', color: '#64748b', badge: 'bg-slate-100 text-slate-700' },
+  trapped: { label: 'Trapped', color: '#dc2626', badge: 'bg-red-50 text-red-800' },
+  needs_help: { label: 'Needs help', color: '#d97706', badge: 'bg-amber-50 text-amber-900' },
+  can_leave: { label: 'Can leave', color: '#16a34a', badge: 'bg-emerald-50 text-emerald-800' },
 }
 
 export const STATUS: Record<Call['status'], string> = {

@@ -69,6 +69,30 @@ The current local demo keys were approved and configured on November 8, 2026, wi
 
 ## Connected dashboard (November 8 integration)
 
+### Manual clinic outreach demo
+
+After a contact search, select a discovered clinic in **Contacts** or on the map.
+Choose **Open clinic caller** to open the same phone screen as the inbound 911 demo in a new tab.
+Press **Respond as clinic** and allow microphone access. You play clinic reception;
+a separate ElevenLabs outreach agent asks about the current situation first, then patients
+or others needing assistance, counts, transport and supply needs. It retrieves the current
+published instruction for the listed clinic location before explaining exercise guidance.
+Confirm the address during the conversation. Missing or conflicting instructions require
+coordinator clarification. Transcripts and attributed needs remain under the selected facility.
+
+This is a browser conversation: no institution is dialed, no phone candidate is required,
+and discovery does not start calls automatically. Bulk/scripted call controls are hidden.
+The inbound voice caller remains a separate agent. To configure or update the dedicated
+outreach agent, run `.venv/bin/python scripts/configure_outreach.py --update-existing`.
+
+Validation: backend and frontend tests plus the production frontend build pass. A real
+ElevenLabs test with synthetic typed clinic replies received audio, saved a two-person
+transport need, and fetched and explained the published exercise guidance. Browser microphone
+capture has not been verified in this pass. For the provider check, use an isolated local
+backend with an offline contact search and run `scripts/smoke_contacts.py --base-url <url>`.
+
+### Dashboard integration
+
 The dashboard from GitHub `main` (`a83428b`) is integrated with the voice backend.
 `./scripts/run-demo.sh` builds both interfaces. Open `/dashboard/`, then **Open voice caller**.
 The phone interface always uses dashboard context. The debug inspector links to the dashboard for zone management; the old synthetic-area editor and fixture-mode URL switch have been removed.
@@ -82,7 +106,7 @@ or automatic dispatch acceptance are loaded by the connected dashboard.
 Publish instructions using **Publish area instruction**. These are durable, versioned records shared
 with the voice agent. Caller-confirmed place names are resolved to evidence-backed map references; published polygons
 are matched against those coordinates. Zones without a polygon use the confirmed area name. Ambiguous
-locations remain unresolved. Overlapping zones with identical action and instruction text share that guidance;
+locations keep their candidate points and sourced bounds visible. If every candidate and available footprint has the same published instruction, the agent can relay it while retaining location uncertainty. Overlapping zones with identical action and instruction text share that guidance;
 conflicting instructions create a durable operator inbox request. Place references are approximate, not device GPS. Publishing a new
 version refreshes matching active dashboard calls and invalidates stale background analysis.
 
@@ -127,7 +151,7 @@ New ElevenLabs calls use the updated conversational policy: pause intake for cal
 accept explicit present-location statements, recheck after corrections or challenges to old guidance,
 and resume unanswered intake questions only after addressing the caller's concern. Assessment and
 instruction updates are forwarded as current backend context. Provider contextual updates are
-non-interrupting; delivery to context alone does not prove they have been spoken.
+non-interrupting. Explicit operator replies additionally send an operator-attributed response trigger, so the agent need not wait for caller speech. Operator messages are excluded from caller transcripts and cannot supply new caller facts. Delivery or a response request does not prove the caller heard it.
 
 `npm test --prefix frontend` covers durations, unknown facts, coordinate mapping, stable transcript
 corrections, and unchanged polling. `npm test --prefix web` covers stale context and changed facts.
@@ -138,7 +162,7 @@ pause, and resume using typed inputs/generated audio; microphone ASR requires a 
 
 Click **Inbox** in the dashboard header to see unread agent requests, the caller/agent transcript,
 and operator reply history. Replies use the existing live voice context channel, with separate
-queued and context-delivered states. Ended calls retain their history and cannot receive replies.
+queued, context-delivered, and response-requested states. Ended calls retain their history and cannot receive replies.
 Messages and read state persist in SQLite. The agent's `message_operator` tool returns a saved
 receipt; the prompt prohibits claiming an escalation succeeded without that receipt. Saving a
 message does not mean an operator read it or accepted an assistance request.

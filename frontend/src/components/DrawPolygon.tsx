@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import type { LatLng } from '@/types'
 
 // Mounted only during drawing, so finishing or cancelling clears every draft point.
-export function DrawPolygon({ onDone, onCancel }: { onDone: (points: LatLng[]) => void; onCancel: () => void }) {
+export function DrawPolygon({ onDone, onCancel, label = 'Instruction zone' }: { label?: string; onDone: (points: LatLng[]) => void; onCancel: () => void }) {
   const [points, setPoints] = useState<LatLng[]>([])
   const [cursor, setCursor] = useState<LatLng>()
   const map = useMapEvents({
@@ -58,7 +58,7 @@ export function DrawPolygon({ onDone, onCancel }: { onDone: (points: LatLng[]) =
     <div className="absolute top-3 left-3 right-3 z-[1000] w-fit max-w-[calc(100%-1.5rem)] rounded-lg border border-red-300 bg-background/95 p-2 text-xs shadow-sm"
       ref={(element) => { if (element) { L.DomEvent.disableClickPropagation(element); L.DomEvent.disableScrollPropagation(element) } }}>
       <div role="status" className="mb-2 flex items-center gap-2"><PencilRuler className="size-3.5 shrink-0 text-red-600" />
-        {points.length < 3 ? `Click the map to add corners · ${points.length}/3 minimum` : 'Add corners, then Finish or click the first point.'}
+        {label} · {points.length < 3 ? `Click the map to add corners · ${points.length}/3 minimum` : 'Add corners, then Finish or click the first point.'}
       </div>
       <div className="flex flex-wrap items-center gap-1">
         <Button size="xs" disabled={!canFinish} onClick={finish}><Check /> Finish</Button>

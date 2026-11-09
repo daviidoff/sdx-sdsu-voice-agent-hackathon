@@ -74,7 +74,10 @@ def test_separate_intersections_remain_ambiguous(client, monkeypatch):
                 {'tags': {'name': 'Everts Street'}, 'nodes': [4], 'geometry': [other]}]
     monkeypatch.setattr('app.intersections.fetch_crossing_roads', roads)
     result = client.post(start(client) + '/resolve', json={'location': QUERY}).json()
-    assert result['action'] == 'unknown' and result['location_resolution']['status'] == 'ambiguous'
+    assert result['action'] == 'shelter' and result['match_method'] == 'candidate_consensus'
+    assert result['location_resolution']['status'] == 'ambiguous'
+    assert 'lat' not in result['location_resolution']
+    assert len(result['location_resolution']['candidates']) == 2
 
 
 def test_divided_road_nodes_form_one_junction(client, monkeypatch):

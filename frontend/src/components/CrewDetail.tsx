@@ -1,11 +1,11 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Accessibility, PhoneCall, Radio, Truck } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { activeDispatch, etaMin, suggestCalls } from '@/lib/dispatch'
 import { cn } from '@/lib/utils'
-import type { Call, Dispatch, Responder, TranscriptLine } from '@/types'
+import type { Call, Dispatch, Facility, Responder, TranscriptLine } from '@/types'
 import { CREW_KIND, CREW_STATUS, SITUATION } from './labels'
 
 export function CrewDetail({
@@ -14,8 +14,11 @@ export function CrewDetail({
   dispatches,
   now,
   onDispatch,
-  onSelectCall,
+  onSelectCall, facilities, onRoute, onRelease,
 }: {
+  facilities: Facility[]
+  onRoute: (facility: Facility) => void
+  onRelease: () => void
   crew: Responder
   calls: Call[]
   dispatches: Dispatch[]
@@ -23,6 +26,9 @@ export function CrewDetail({
   onDispatch: (call: Call) => void
   onSelectCall: (id: string) => void
 }) {
+  const [destination, setDestination] = useState('')
+  const destinations = facilities.filter((f) => f.position)
+  const chosen = destinations.find((f) => f.id === destination)
   const d = activeDispatch(dispatches, crew.id)
   const last = d ?? [...dispatches].reverse().find((x) => x.crewId === crew.id)
   const options = suggestCalls(crew, calls, dispatches, now)
@@ -49,8 +55,9 @@ export function CrewDetail({
             <div className="mt-0.5">
               {d.status === 'calling' && 'Calling the crew…'}
               {d.status === 'en_route' && `En route ${d.routeText} · ETA ${etaMin(d, now)} min`}
-              {d.status === 'on_scene' && 'On scene'}
+              {d.status === 'on_scene' && 'On scene (simulated)'}
             </div>
+            <Button size="sm" variant="outline" className="mt-2" onClick={onRelease}>{d.status === 'on_scene' ? 'Resume patrol' : 'Cancel route'}</Button>
             {d.target.kind === 'call' && (
               <button className="mt-1 underline" onClick={() => onSelectCall(d.target.id)}>Open caller</button>
             )}
@@ -60,7 +67,17 @@ export function CrewDetail({
       <Separator />
       {!d && (
         <div className="space-y-2 p-4">
-          <div className="text-xs font-medium text-muted-foreground">Send to rescue</div>
+          <div className="space-y-2 rounded-lg border p-3">
+            <label htmlFor="crew-destination" className="text-sm font-medium">Route to a point of interest</label>
+            <select id="crew-destination" className="w-full rounded-md border bg-background p-2 text-sm" value={destination} onChange={(event) => setDestination(event.target.value)}>
+              <option value="">Choose a destination…</option>
+              {destinations.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>
+            {!destinations.length && <p className="text-xs text-muted-foreground">Find contacts with map locations to use as destinations.</p>}
+            <Button size="sm" disabled={!chosen} onClick={() => { if (chosen) onRoute(chosen) }}>Set simulated route</Button>
+            <p className="text-xs text-muted-foreground">Routes do not account for disaster conditions.</p>
+          </div>
+          <div className="text-xs font-medium text-muted-foreground">Simulate a rescue route</div>
           {options.length === 0 && <p className="text-xs text-muted-foreground">No disabled or trapped callers waiting for a crew.</p>}
           {options.slice(0, 4).map(({ call, km, fits }, i) => (
             <div key={call.id} className="rounded-lg border p-3">
@@ -75,8 +92,8 @@ export function CrewDetail({
               <div className="mt-2 flex items-center gap-2">
                 {i === 0 && fits && <Badge variant="outline">Best match</Badge>}
                 {!fits && <span className="text-xs text-red-600">Can't carry a wheelchair</span>}
-                <Button size="sm" className="ml-auto" onClick={() => onDispatch(call)} disabled={!fits}>
-                  <PhoneCall /> Call crew & dispatch
+                <Button size="sm" className="ml-auto" onClick={() => onDispatch(call)} disabled={!fits || !call.position}>
+                  <PhoneCall /> Simulate crew dispatch
                 </Button>
               </div>
             </div>

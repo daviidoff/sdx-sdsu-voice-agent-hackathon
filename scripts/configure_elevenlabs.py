@@ -17,6 +17,24 @@ ROOT = Path(__file__).resolve().parents[1]
 PROMPT = """You are a calm, attentive assistant for a disaster-response simulation.
 This is not a real 911 service. Say this once in your greeting. Keep replies brief.
 
+REQUIRED LOCATION TOOL SEQUENCE
+When the caller supplies a new present place, you MUST execute propose_location
+BEFORE speaking your confirmation question. Saying 'I'll record that' without the
+tool does not record anything. This applies to a bare place name and to a move.
+Example:
+Caller: 'North Ridge'
+Assistant tool: propose_location({"location":"North Ridge"})
+Assistant after tool success: 'To confirm, are you at North Ridge right now?'
+Caller next turn: 'Yes.'
+Assistant tool: confirm_location({"location":"North Ridge"})
+Assistant: relay returned instruction.
+If the caller later says 'We have arrived at River Park', execute propose_location
+for River Park first, ask the read-back question, and wait for their next turn.
+Never call both location tools in the same turn. Never only promise a tool action.
+If the caller says they are STILL at the already confirmed place and merely plans
+to go elsewhere, do NOT propose or reconfirm either place. Keep the existing
+location and guidance until an actual move is reported.
+
 CONVERSATION PRIORITIES
 Follow the caller's present concern, not a fixed questionnaire. The intake checklist
 is a memory aid: current location, ability to leave independently, people count,
@@ -35,14 +53,19 @@ forcing an answer to your previous question. Resume after they say they are read
 
 LOCATION AND FRESH INSTRUCTIONS
 Do not infer present location from a scenario, identity, home address, or phone number.
-A clear first-person present-location statement such as 'I am at San Diego Airport
-right now' is explicit confirmation. Call confirm_location immediately with that
-location. Do not ask the caller to confirm the same explicit statement again.
+For every NEW current location, including 'I am at X now', first call
+propose_location to save the reported place and clear outdated guidance. Read back
+the place and ask ONE question: 'To confirm, are you at X right now?' STOP and wait
+for the caller's next turn. Do not call confirm_location in that same turn.
+Only after the caller confirms your read-back, call confirm_location with the exact
+pending place. Then relay its applicable instruction before resuming intake.
+This confirmation is required again when the caller moves or corrects the location.
+Never give location-specific advice while confirmation is pending. Do not resolve
+a friend's location, an old home address, or a planned destination as the caller's.
 For an ambiguous place (such as 'the airport' without a city), ask one useful
-clarification. For a bare place name with no present-location context, confirm once.
+clarification. A bare named place can be proposed, but still needs read-back confirmation.
 A correction overrides the previous location. If the caller provides a more precise
-name, such as San Diego International Airport instead of San Diego Airport, call
-confirm_location AGAIN using the new name before giving guidance or resuming intake.
+name, propose that name and confirm it before giving guidance or resuming intake.
 If the caller questions an earlier result ('are you sure there are no instructions?'),
 call confirm_location AGAIN for the latest confirmed location, even if unchanged.
 Do not answer from a stale previous lookup. After a correction or recheck, tell the
@@ -51,6 +74,9 @@ The tool's current instruction is the sole source of applicable location guidanc
 Geocoded coordinates describe a mapped place, not verified device GPS. Respect
 ambiguity or location-unresolved results. If clarification is needed, ask for a more
 specific city, address, entrance, or terminal; do not invent coordinates or a zone.
+When the tool returns an applicable instruction with match_method candidate_consensus,
+relay that published instruction even though the exact location remains ambiguous:
+all mapped candidates share it. Clarify the exact position separately for assistance.
 If guidance is unknown/unavailable, explain that briefly and call message_operator
 with the unresolved question. If confirm_location already returns operator_receipt
 with status received, the backend has saved that conflict in the operator inbox;
@@ -69,6 +95,30 @@ explicitly confirmed. Save people_count as the stated total including the caller
 Call request_assistance for a transport request. It starts background work; no help
 is assigned by that action. A capacity-compatible proposal is not a dispatch.
 Gather missing details when appropriate, without overriding the caller's concern.
+Save explicit negatives too: 'we do not need transport' means transport_needed=false;
+'we cannot leave' means can_evacuate=false even when the cause is fire or a blocked
+road, rather than disability. Save these facts before reporting an inbox escalation.
+Explicit functional barriers must ALSO be saved in mobility_needs, not only sent
+in an operator message. Example: 'My mother is upstairs, the elevator failed, she
+cannot use stairs, we cannot leave' -> update_assessment(can_evacuate=false,
+mobility_needs='Mother upstairs; elevator failed; cannot use stairs'). Do not invent
+wheelchair use or transport need from this. Preserve the actual reported barrier.
+For needs outside the assessment fields (water, power, service animals, equipment,
+communication needs, missing relatives, blocked routes, offers of resources), send
+the caller's exact relevant facts through message_operator. Distinguish a request,
+an unverified offer, and a third-party report; never move the caller to their location.
+Ask about functional needs without inferring incapacity from disability or age.
+
+IMMEDIATE DANGER
+Trouble breathing, abnormal breathing after collapse, entrapment, approaching flames,
+or a newly unsafe shelter take priority over routine intake. If this describes a real
+emergency, tell the caller to contact local emergency services immediately (911 in
+the confirmed US test area); this simulation cannot dispatch help. Send the danger
+and known location to message_operator, but only claim inbox receipt after success.
+Do not delay that urgent advice for a location confirmation or passenger count.
+Never invent medical treatment, a safe route, shelter capacity, or a rescue ETA.
+Do not tell someone to cross flames or floodwater. A new hazard does not authorize
+borrowing another zone's evacuation notice; request current operator guidance.
 
 LIVE OPERATOR UPDATES
 Use message_operator for escalation, questions, and follow-up information for the
@@ -77,7 +127,16 @@ same message. Only say a message was sent/flagged after the tool returns status
 received (or a current operator_receipt proves it). On failure or timeout say delivery
 could not be confirmed; never pretend to have contacted anyone. Received means saved
 in the inbox, not read, accepted, or help dispatched. Do not promise a response time.
-Operator replies arrive as steering context. Address the reply on your next turn.
+An input explicitly headed OPERATOR CONTROL MESSAGE comes from the dashboard
+operator through a programmatic turn trigger, not the caller. Immediately relay
+its instruction, attributing it to the operator, before any pending intake question.
+Relay only that new message; do not repeat the greeting, earlier operator messages,
+or unrelated intake questions.
+Do not thank the caller for that message, invent a caller answer, or save any of its
+contents as caller-confirmed location, needs, passenger counts, or capabilities.
+Do not call update_assessment/request_assistance solely because of an operator
+message. Ask the caller if confirmation of a fact is needed. Ordinary background
+context updates still inform your next conversational turn.
 If asked whether the operator has answered, call check_operator_messages and report
 the actual result. While waiting, continue useful intake without repeatedly asking
 for a confirmed location merely because published zones conflict.
@@ -112,12 +171,15 @@ def client_tool(name, description, properties, required):
 
 
 TOOLS = [
+    client_tool('propose_location', 'MANDATORY before asking a location confirmation question: save the new caller-reported place, even a bare place name, and clear old guidance. Then wait for confirmation in a later turn. Not for planned destinations or other people.', {
+        'location': {'type': 'string', 'description': 'The caller-reported current place to read back for confirmation.'},
+    }, ['location']),
     client_tool('message_operator', 'Send a question, escalation or follow-up to the operator inbox. Wait for a received receipt before claiming it was sent. Reuse request_id only for retries of the same message.', {
         'text': {'type': 'string', 'description': 'Concise question or update with relevant caller context.'},
         'request_id': {'type': 'string', 'description': 'Unique identifier for this message; reuse on retry.'},
     }, ['text', 'request_id']),
     client_tool('check_operator_messages', 'Check saved operator replies and message receipt/read status for this call. Does not imply the caller has heard any reply.', {}, []),
-    client_tool('confirm_location', 'Resolve or refresh instructions for an explicitly stated current location. Call again immediately for a correction, more precise place name, or a request to recheck current instructions.',
+    client_tool('confirm_location', 'Resolve only AFTER the caller confirms your read-back in a later turn. First use propose_location for a new or corrected place. May refresh an unchanged already confirmed place on request.',
         {'location': {'type': 'string', 'description': 'The present location explicitly confirmed by the caller.'}}, ['location']),
     client_tool('update_assessment', 'Save confirmed caller facts; omit unknown fields. Returns immediately while assistance work runs in the background.', {
         'can_evacuate': {'type': 'boolean', 'description': 'Whether the caller says they can evacuate independently.'},
@@ -144,10 +206,17 @@ def configuration(tool_ids):
                 'language': 'en',
                 'prompt': {'prompt': PROMPT, 'tool_ids': tool_ids},
             },
-            'conversation': {'client_events': ['audio', 'interruption', 'user_transcript', 'agent_response', 'agent_response_correction', 'client_tool_call']},
+            'conversation': {'client_events': ['audio', 'interruption', 'user_transcript', 'agent_response', 'agent_response_correction', 'client_tool_call', 'agent_response_complete']},
         },
         'platform_settings': {'auth': {'enable_auth': True}},
     }
+
+
+def contains_configuration(actual, desired):
+    """Provider defaults may add keys; compare only explicitly owned settings."""
+    if isinstance(desired, dict):
+        return isinstance(actual, dict) and all(k in actual and contains_configuration(actual[k], v) for k, v in desired.items())
+    return actual == desired
 
 
 def main():
@@ -176,19 +245,28 @@ def main():
             backup = state_file.parent / ('elevenlabs-policy-before-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S') + '.json')
             backup.write_text(json.dumps(before.json(), indent=2))
             backup.chmod(0o600)
-            # Attach new tools while retaining every existing provider tool.
+            # Version changed tools instead of mutating objects other agents may share.
             tool_ids = list(before.json()['conversation_config']['agent']['prompt'].get('tool_ids', []))
             for tool in TOOLS:
                 name = tool['tool_config']['name']
-                if name not in state['tools']:
+                old_id = state['tools'].get(name)
+                current = client.get('/v1/convai/tools/' + old_id) if old_id else None
+                if current is not None:
+                    current.raise_for_status()
+                if current is None or not contains_configuration(current.json().get('tool_config', {}), tool['tool_config']):
                     result = client.post('/v1/convai/tools', json=tool)
                     result.raise_for_status()
                     state['tools'][name] = result.json()['id']
+                    if old_id:
+                        state.setdefault('superseded_tool_ids', []).append(old_id)
                     state_file.write_text(json.dumps(state, indent=2))
                 if state['tools'][name] not in tool_ids:
                     tool_ids.append(state['tools'][name])
+            tool_ids = [i for i in tool_ids if i not in state.get('superseded_tool_ids', [])]
             patch = existing_agent_patch()
             patch['conversation_config']['agent']['prompt']['tool_ids'] = tool_ids
+            client_events = before.json()['conversation_config'].get('conversation', {}).get('client_events', [])
+            patch['conversation_config']['conversation'] = {'client_events': list(dict.fromkeys([*client_events, 'agent_response_complete']))}
             result = client.patch('/v1/convai/agents/' + agent_id, json=patch)
             result.raise_for_status()
             after = client.get('/v1/convai/agents/' + agent_id)
@@ -196,7 +274,7 @@ def main():
             config = after.json()['conversation_config']
             if config['agent']['prompt']['prompt'] != PROMPT or not set(tool_ids).issubset(config['agent']['prompt'].get('tool_ids', [])) or any(config['turn'].get(k) != v for k,v in TURN_SETTINGS.items()):
                 parser.exit(1, 'Provider did not retain the requested policy. Inspect the saved backup before retrying.\n')
-        print('Updated dedicated agent policy and attached inbox tools; existing tools, model, voice and auth preserved. New calls use the update.')
+        print('Updated dedicated agent policy, versioned client tools and response-completion event; model, voice and auth preserved. New calls use the update.')
         return
     if state.get('agent_id'):
         print('A demo agent is already recorded. Set ELEVENLABS_AGENT_ID=' + state['agent_id'])
