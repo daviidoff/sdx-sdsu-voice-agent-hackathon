@@ -4,6 +4,7 @@ import { api } from '@/lib/feed'
 import { waitForStartup } from '@/lib/voice-startup'
 import { deliverReceiverMessage } from '@/lib/contacts'
 import type { ContactSession } from '@/lib/contacts'
+import { Input } from '@/components/ui/input'
 import { Button } from './ui/button'
 
 export function MockReceiver({ session, onClose }: { session: ContactSession; onClose: () => void }) {
@@ -119,7 +120,7 @@ export function MockReceiver({ session, onClose }: { session: ContactSession; on
       {error && <p role="alert" className="rounded bg-red-50 p-2 text-sm">{error}</p>}
       {!started && <div className="flex gap-2"><Button disabled={busy} onClick={() => void answer()}>Answer with microphone</Button><Button variant="outline" disabled={busy} onClick={() => void answer(true)}>Answer as text test</Button></div>}
       <div className="min-h-16 space-y-2 overflow-y-auto rounded border p-3 text-sm">{messages.map((m) => <div key={m.key}><strong>{m.role === 'user' ? 'You · receiver' : 'Outreach agent'}: </strong>{m.text}</div>)}</div>
-      {connected && <><form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void sendText() }}><input aria-label="Receiver message" className="min-w-0 flex-1 rounded border p-2 text-sm" value={text} onChange={(e) => setText(e.target.value)} placeholder="Type as the receptionist…" /><Button type="submit" disabled={busy || !text.trim()}>Send</Button></form><Button variant="outline" onClick={() => { voice.current?.setMicMuted(!muted); setMuted(!muted) }}>{muted ? 'Unmute microphone' : 'Mute microphone'}</Button></>}
+      {connected && <><form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void sendText() }}><Input aria-label="Receiver message" className="h-auto min-w-0 flex-1 p-2 text-sm" value={text} onChange={(e) => setText(e.target.value)} placeholder="Type as the receptionist…" /><Button type="submit" disabled={busy || !text.trim()}>Send</Button></form><Button variant="outline" onClick={() => { voice.current?.setMicMuted(!muted); setMuted(!muted) }}>{muted ? 'Unmute microphone' : 'Mute microphone'}</Button></>}
       <Button variant="destructive" onClick={() => { if (ended.current) onClose(); else void close() }}>{connected ? 'End demo call' : 'Close'}</Button>
     </div>
   </div>

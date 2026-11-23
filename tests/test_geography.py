@@ -69,7 +69,7 @@ def test_updated_polygon_recomputes_active_instruction_and_invalidates_old_resul
     moved = client.get(path).json()
     assert moved['instruction']['action'] == 'unknown'
     assert moved['revision'] > first['revision']
-    assert moved['events'][-1]['type'] == 'instruction.updated'
+    assert next(e for e in reversed(moved['events']) if e['type'] == 'instruction.updated')['payload'] == moved['instruction']
 
 
 def test_unknown_correction_clears_previous_coordinate_and_polygon_instruction(client):
@@ -266,3 +266,41 @@ def test_stale_resolution_cannot_apply_instruction_for_new_location(client):
     initialize(db)
     result = instruction_for(db, 'New location', {'status': 'resolved', 'query': 'Old location', 'lat': 1, 'lng': 1})
     assert result['match_status'] == 'unlocated'
+
+
+def test_ambiguous_hospital_clarification_resolves_operator_area_in_next_turn(client, monkeypatch):
+    """The tool must expose both hospitals before asking, then accept the city answer."""
+    hospitals = [
+        {'type': 'Feature', 'properties': {'osm_type': 'W', 'osm_id': 570070336,
+          'osm_key': 'amenity', 'name': 'Scripps Mercy Hospital', 'city': 'San Diego'},
+         'geometry': {'type': 'Point', 'coordinates': [-117.160071, 32.7513283]}},
+        {'type': 'Feature', 'properties': {'osm_type': 'W', 'osm_id': 569998588,
+          'osm_key': 'amenity', 'name': 'Scripps Mercy Hospital Chula Vista', 'city': 'Chula Vista'},
+         'geometry': {'type': 'Point', 'coordinates': [-117.0839903, 32.6336784]}},
+    ]
+    async def lookup(query, focus):
+        return hospitals
+    monkeypatch.setattr('app.geography.fetch_features', lookup)
+    publish(client, id='hospital-area', polygon=[[32.74,-117.17],[32.76,-117.17],[32.76,-117.15],[32.74,-117.15]],
+            instruction='Operator instruction: evacuate this hospital area.')
+    path = start(client)
+    proposal = client.post(path+'/location-proposal', json={'location':'Mercy Hospital'}).json()
+    reported = proposal['reported_zone']
+    assert reported['resolution']['status'] == 'ambiguous'
+    assert len(reported['resolution']['candidates']) == 2
+    assert reported['instruction']['action'] == 'unknown'
+    assert proposal['instruction'] is None
+    # The model cannot choose a candidate itself in the initial turn.
+    assert client.post(path+'/resolve', json={'location':'Scripps Mercy Hospital, San Diego'}).status_code == 409
+    client.post(path+'/transcript', json={'role':'user','text':'The one in San Diego.'})
+    result = client.post(path+'/resolve', json={'location':'Scripps Mercy Hospital, San Diego'})
+    assert result.status_code == 200
+    assert result.json()['zone_id'] == 'hospital-area'
+    assert result.json()['text'] == 'Operator instruction: evacuate this hospital area.'
+    assert client.get(path).json().get('pending_location') is None
+    # Rechecks use the latest operator revision, not the provisional result.
+    publish(client, id='hospital-area', level='shelter',
+            polygon=[[32.74,-117.17],[32.76,-117.17],[32.76,-117.15],[32.74,-117.15]],
+            instruction='Operator update: shelter in place.')
+    refreshed = client.post(path+'/resolve', json={'location':'Scripps Mercy Hospital, San Diego'}).json()
+    assert refreshed['action'] == 'shelter' and refreshed['version'] == 2

@@ -116,7 +116,7 @@ CASES = [
     case(31, 'New medical danger overrides earlier negative', at()+[
          turn('Nobody is injured. We are two people.', facts={'people_count':2}),
          turn('Now she is struggling to breathe.', contains=r'911|emergency')], gaps=['No medical urgency field or accepted handoff']),
-    case(32, 'Conversation ends unresolved', at()+[turn("I can't keep talking. I need assistance."), {'action':'end'}],
+    case(32, 'Conversation ends unresolved', at()+[turn("I can't keep talking. I need assistance.", unknown=['transport_needed'], operator_contains=r'assist|help'), {'action':'end'}],
          review='Ended never becomes safe or completed; known needs remain.'),
     case(33, 'Two calls remain isolated', at()+[{'action':'other_call'},
          turn('Two people here, and we need transport.', facts={'people_count':2,'transport_needed':True}, other_unchanged=True)]),

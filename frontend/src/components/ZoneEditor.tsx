@@ -1,4 +1,5 @@
 import { Megaphone, ShieldAlert, Trash2, X } from 'lucide-react'
+import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
@@ -60,11 +61,11 @@ export function ZoneEditor({
         </div>
         <label className="grid gap-1.5 text-xs font-medium">
           Instruction the agent gives callers in this zone
-          <textarea
+          <Textarea
             value={zone.instruction}
             onChange={(e) => onChange({ ...zone, instruction: e.target.value })}
             rows={4}
-            className="rounded-md border bg-transparent px-3 py-2 text-sm font-normal outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            className="field-sizing-fixed px-3 text-sm font-normal"
           />
         </label>
         <div className="rounded-md border bg-muted/50 p-3 text-xs">

@@ -229,6 +229,45 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
             call.pop('zone_conflict_request', None)
         return instruction
 
+    def report_zone(call, instruction, *, provisional=False):
+        """Deliver zone results independently of the model remembering to escalate."""
+        location = call.get('pending_location') if provisional else call['assessment'].get('location')
+        summary = {key: instruction.get(key) for key in
+                   ('zone_id', 'action', 'text', 'version', 'match_status', 'matching_zones', 'matching_zone_ids')}
+        signature = json.dumps([location, provisional, summary], sort_keys=True)
+        previous = next((e for e in reversed(events(call['id']))
+                         if e['type'] == 'operator.requested' and e['payload'].get('source') == 'zone_update'), None)
+        if previous and previous['payload'].get('signature') == signature:
+            return
+        state = 'Reported location — awaiting caller confirmation' if provisional else 'Caller-confirmed location'
+        event(call['id'], 'operator.requested', {
+            'source': 'zone_update', 'status': 'received', 'request_id': 'zone-update:' + str(uuid4()),
+            'signature': signature, 'location': location, 'provisional': provisional,
+            'instruction': summary,
+            'text': f"{state}: {location}\nZone: {instruction.get('zone_id') or 'Unresolved'} · v{instruction.get('version') or '—'}\n{instruction.get('text', '')}",
+        })
+
+    def save_reported_zone(call, resolution=None):
+        location = call['pending_location']
+        instruction = instruction_for(db(), location, resolution) if call['scenario_id'] == 'dashboard' else lookup(location)
+        call['reported_zone'] = {'location': location, 'instruction': instruction, 'resolution': resolution,
+                                 'confirmation_required': True}
+        save(call)
+        event(call['id'], 'zone.reported', call['reported_zone'])
+        report_zone(call, instruction, provisional=True)
+
+    async def locate_reported_zone(call_id, location, proposal_id):
+        try:
+            resolution = await resolve_place(db(), location, team_context(db())['facilities'], zones(db()))
+        except Exception:
+            logging.exception('Reported location lookup failed for %s', call_id)
+            resolution = {'status': 'unresolved', 'query': location, 'message': 'Location lookup failed; operator review needed.'}
+        current = read_call(call_id)
+        if (current['status'] == 'ended' or current.get('pending_location') != location
+                or current.get('location_proposal_event_id') != proposal_id):
+            return
+        save_reported_zone(current, resolution)
+
     api.state.store = SimpleNamespace(get_call=read_call, get_events=events, append_event=event, full_call=full)
 
     def say(call_id, text):
@@ -267,6 +306,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         save(call)
         event(call["id"], "assessment.updated", call["assessment"])
         event(call["id"], "instruction.updated", call["instruction"])
+        report_zone(call, call['instruction'])
         return call["instruction"]
 
     async def locate_dashboard(call_id, location, *, historical=False):
@@ -306,6 +346,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         save(current)
         event(call_id, "assessment.updated", current["assessment"])
         event(call_id, "instruction.updated", current["instruction"])
+        report_zone(current, current['instruction'])
         return current["instruction"]
 
     def launch_job(call):
@@ -548,6 +589,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         # A reported move invalidates old guidance immediately, before geocoding.
         # Historical assessment/instruction events retain the previous position.
         call["pending_location"] = location
+        call.pop('reported_zone', None)
         call["assessment"]["location"] = None
         call["assessment"].pop("location_resolution", None)
         call["assessment"].pop("location_confirmed_at", None)
@@ -560,19 +602,31 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         save(call)
         event(call_id, "assessment.updated", call["assessment"])
         event(call_id, "instruction.updated", None)
+        # Return the lookup in this tool response: the voice agent needs the
+        # candidates before it can ask a useful clarification question. Keep the
+        # proposal token so a delayed lookup cannot replace a correction.
+        if call['scenario_id'] != 'dashboard' or instruction_for(db(), location).get('matching_zone_ids'):
+            save_reported_zone(call)
+        else:
+            await locate_reported_zone(call_id, location, proposed['id'])
         return full(call_id)
 
     @api.post("/api/calls/{call_id}/resolve")
     async def resolve_location(call_id: str, body: Location):
         call = read_call(call_id, writable=True)
         pending = call.get("pending_location")
-        if pending and pending.casefold().strip() != body.location.casefold().strip():
+        reported = call.get('reported_zone') or {}
+        clarification = ((reported.get('resolution') or {}).get('status') in
+                         {'ambiguous', 'needs_confirmation', 'unresolved', 'unavailable'}
+                         and (reported.get('instruction') or {}).get('action') == 'unknown')
+        if pending and pending.casefold().strip() != body.location.casefold().strip() and not clarification:
             raise HTTPException(409, "Confirm the pending location or propose the corrected place first")
         if pending:
             proposal_id = call.get("location_proposal_event_id")
             if proposal_id and not any(e["type"] == "transcript" and e["payload"].get("role") == "user" and e["payload"].get("text", "").strip() for e in events(call_id, int(proposal_id))):
                 raise HTTPException(409, "Wait for the caller's next turn after the location read-back")
             call.pop("pending_location")
+            call.pop('reported_zone', None)
             call.pop("location_proposal_event_id", None)
             save(call)
         result = await locate_dashboard(call_id, body.location) if call["scenario_id"] == "dashboard" else resolve(call, body.location)
@@ -640,6 +694,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         call['revision'] += 1
         save(call)
         event(call_id, 'instruction.updated', call['instruction'])
+        report_zone(call, call['instruction'])
         event(call_id, 'steering.queued', {'id': str(uuid4()), 'status': 'queued',
             'instruction': call['instruction'],
             'text': 'Operator selected the applicable instruction for this call: ' + chosen['text']})
@@ -765,6 +820,9 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         # Refresh all dashboard calls, including those whose old area no longer matches.
         for row in db().execute("SELECT data FROM calls").fetchall():
             call = json.loads(row["data"])
+            if call['status'] != 'ended' and call['scenario_id'] == 'dashboard' and call.get('pending_location'):
+                save_reported_zone(call, (call.get('reported_zone') or {}).get('resolution'))
+                continue
             location = call["assessment"].get("location")
             if call["status"] == "ended" or call["scenario_id"] != "dashboard" or not location:
                 continue
@@ -775,6 +833,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
             call["revision"] += 1
             save(call)
             event(call["id"], "instruction.updated", instruction)
+            report_zone(call, instruction)
             launch_job(call)
 
     return api

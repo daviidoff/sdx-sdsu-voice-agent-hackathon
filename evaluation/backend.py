@@ -87,7 +87,7 @@ class Sandbox:
                 result = self.api(path+'/operator-messages')
             elif name == 'propose_location':
                 call = self.api(path+'/location-proposal', {'location': parameters['location']})
-                result = {key: call.get(key) for key in ('assessment','instruction','status','revision','pending_location')}
+                result = {key: call.get(key) for key in ('assessment','instruction','status','revision','pending_location','reported_zone')}
             elif name == 'confirm_location':
                 result = self.api(path+'/resolve', {'location': parameters['location']})
             elif name in {'update_assessment', 'request_assistance'}:

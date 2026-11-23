@@ -56,12 +56,11 @@ class Dashboard:
             render_error = type(exc).__name__+': dashboard did not converge to current location/instruction'
         panel = self.page.get_by_role('region',name='Call details panel')
         detail = (panel if panel.count() else self.page.locator('aside').last).inner_text(timeout=5000)
-        # Leaflet renders CircleMarker geometry as SVG paths containing arc commands.
         expected_markers = sum(c['assessment'].get('location_resolution',{}).get('status')=='resolved' for c in self.sandbox.snapshot()['calls'])
         # The selected call may not change when another call is added. Wait for
         # polling to render its marker too, rather than score the previous frame.
         try:
-            self.page.wait_for_function(r'n => [...document.querySelectorAll(".leaflet-overlay-pane path")].filter(e => /a\d+(?:\.\d+)?,\d/.test(e.getAttribute("d") || "")).length === n',arg=expected_markers,timeout=5000)
+            self.page.wait_for_function('n => document.querySelectorAll(".caller-marker").length === n',arg=expected_markers,timeout=5000)
         except Exception:
             pass
         # flyTo animates for 0.6s. Wait for stable rendered geometry, rather than
@@ -70,7 +69,7 @@ class Dashboard:
           const start=performance.now(); let last='',changed=start;
           const tick=() => {
             const now=performance.now();
-            const nodes=[...document.querySelectorAll('.leaflet-map-pane,.leaflet-overlay-pane path')];
+            const nodes=[...document.querySelectorAll('.leaflet-map-pane,.leaflet-overlay-pane path,.response-marker')];
             const current=JSON.stringify(nodes.map(e=>[e.getAttribute('d'),e.getAttribute('style'),e.getBoundingClientRect().x,e.getBoundingClientRect().y]));
             if(current!==last){last=current;changed=now;}
             if(now-start>650 && now-changed>250) return resolve(true);
@@ -78,28 +77,31 @@ class Dashboard:
             requestAnimationFrame(tick);
           }; requestAnimationFrame(tick);
         })''')
-        paths = self.page.locator('.leaflet-overlay-pane path').evaluate_all(r'(els) => els.map(e => e.getAttribute("d")).filter(d => /a\d+(?:\.\d+)?,\d/.test(d || ""))')
+        markers = self.page.locator('.caller-marker').evaluate_all('(els) => els.map(e => e.title)')
         map_box = self.page.locator('.leaflet-container').bounding_box()
         map_visible = bool(map_box and map_box['width'] >= 200 and map_box['height'] >= 200 and self.page.locator('.leaflet-container').is_visible())
-        # Synthetic place markers use independent Leaflet Marker rendering. The
-        # selected caller's CircleMarker must coincide with the named fixture,
-        # not just exist somewhere in the SVG.
+        # Compare the Leaflet anchors even if the caller icon sits beside the
+        # place icon to keep both click targets visible.
         from evaluation.backend import LOCATIONS
         query = call['assessment'].get('location') or ''
         fixture = next((name for name in LOCATIONS if query==name or query.startswith(name+',') or query.startswith(name+' in ')),None)
-        marker_geometry = self.page.evaluate(r'''name => {
+        marker_geometry = self.page.evaluate('''name => {
           if(!name) return null;
-          const place=[...document.querySelectorAll('.leaflet-marker-icon')].find(e=>e.getAttribute('title')===name);
-          const caller=[...document.querySelectorAll('.leaflet-overlay-pane path')].find(e=>e.getAttribute('stroke')==='#0f172a' && /a\d+(?:\.\d+)?,\d/.test(e.getAttribute('d')||''));
+          const place=[...document.querySelectorAll('.leaflet-marker-icon:not(.caller-marker)')].find(e=>e.title===name);
+          const caller=document.querySelector('.caller-marker-selected');
           if(!place||!caller) return {matches:false,reason:'Expected place or selected caller marker missing'};
-          const a=place.getBoundingClientRect(),b=caller.getBoundingClientRect();
-          const distance=Math.hypot(a.x+a.width/2-b.x-b.width/2,a.y+a.height/2-b.y-b.height/2);
+          const anchor=marker => {
+            const bounds=marker.getBoundingClientRect();
+            return [bounds.x-parseFloat(marker.style.marginLeft),bounds.y-parseFloat(marker.style.marginTop)];
+          };
+          const a=anchor(place),b=anchor(caller);
+          const distance=Math.hypot(a[0]-b[0],a[1]-b[1]);
           return {matches:distance<=3,pixel_distance:distance};
         }''',fixture)
-        result = {'detail':detail, 'circle_paths':paths, 'expected_marker_count':expected_markers,
+        result = {'detail':detail, 'caller_markers':markers, 'expected_marker_count':expected_markers,
                   'map_visible':map_visible, 'map_box':map_box,'map_settled':settled,'marker_geometry':marker_geometry,
-                  'marker_count_matches':len(paths)==expected_markers, 'page_errors':list(self.errors), 'render_error':render_error,
-                  'scope':'Rendered dashboard, current text, visible map, circle count and selected caller alignment with named synthetic place marker. Does not verify real-world geocoding.'}
+                  'marker_count_matches':len(markers)==expected_markers, 'page_errors':list(self.errors), 'render_error':render_error,
+                  'scope':'Rendered dashboard, current text, visible map, caller marker count and selected caller alignment with named synthetic place marker. Does not verify real-world geocoding.'}
         if screenshot:
             self.page.screenshot(path=str(screenshot), full_page=True)
         return result

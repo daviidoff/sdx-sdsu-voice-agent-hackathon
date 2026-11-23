@@ -1,5 +1,6 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Accessibility, ChevronDown, MapPin, MessageSquareText, Phone, PhoneCall, Send, Truck, Users } from 'lucide-react'
+import { Accessibility, ArrowDown, ChevronDown, LoaderCircle, MapPin, Phone, PhoneCall, Send, Truck, Users } from 'lucide-react'
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -85,20 +86,17 @@ export function CallDetail({
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-      <div className="shrink-0 space-y-2 border-b px-4 py-3">
+      <div className="shrink-0 space-y-2 border-b px-4 py-3 sm:px-5">
         <div className="flex items-start justify-between gap-2">
-          <h2 className="min-w-0 truncate text-sm font-semibold" title={call.callerName}>{call.callerName}</h2>
-          <div className="flex shrink-0 items-center gap-2">
-            {call.status === 'active' && <span className="flex items-center gap-1 text-xs font-medium text-red-600"><span className="size-2 animate-pulse rounded-full bg-red-500" />LIVE</span>}
-            <span className="font-mono text-xs tabular-nums text-muted-foreground">{callDuration(call, now)}</span>
-            <button type="button" onClick={() => setShowDetails(!showDetails)} aria-expanded={showDetails} aria-controls="call-details" className="flex items-center gap-1 rounded px-1 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground">
-              Details <ChevronDown className={cn('size-3 transition-transform', showDetails && 'rotate-180')} />
-            </button>
-          </div>
+          <h3 className="min-w-0 text-pretty text-lg leading-tight font-semibold tracking-tight [overflow-wrap:anywhere]">{call.callerName}</h3>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setShowDetails(!showDetails)} aria-expanded={showDetails} aria-controls="call-details">
+            Details <ChevronDown className={cn('size-3 transition-transform', showDetails && 'rotate-180')} aria-hidden="true" />
+          </Button>
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          <Badge className={SITUATION[call.situation].badge}>{situationLabel(call)}</Badge>
-          {call.status !== 'active' && <Badge variant="outline">{STATUS[call.status]}</Badge>}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          <span className={cn(call.status === 'active' && 'flex items-center gap-1.5 font-medium text-primary')}>{call.status === 'active' && <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />}{STATUS[call.status]}</span>
+          <span>{callDuration(call, now)}</span>
+          {call.situation !== 'unknown' && <Badge className={SITUATION[call.situation].badge}>{situationLabel(call)}</Badge>}
         </div>
         <div className="grid gap-1 text-xs text-muted-foreground">
           <span className="flex min-w-0 items-center gap-1.5"><MapPin className="size-3.5 shrink-0" /><span className="truncate" title={call.address}>{call.address}</span></span>
@@ -108,7 +106,6 @@ export function CallDetail({
       {showDetails && <div id="call-details" className="max-h-[30%] shrink-0 space-y-2 overflow-y-auto border-b bg-muted/20 px-4 py-3 text-xs">
         <div className="break-all text-muted-foreground">Call {call.id}</div>
         <div className="flex items-center gap-1.5 text-muted-foreground"><Phone className="size-3.5" />{call.phone}</div>
-        <p>{call.address} · {call.people ?? 'Unknown'} people · {call.mobility}</p>
         {ended && call.currentSpatialInstruction ? <>
           <div className="rounded-md border border-blue-200 bg-blue-50 p-2.5 text-xs text-blue-900">
             <div className="font-medium">Current map instruction · looked up after this call</div>
@@ -131,29 +128,30 @@ export function CallDetail({
         </div>
       </div>}
       <Rescue call={call} responders={responders} dispatches={dispatches} now={now} onDispatch={onDispatch} onSelectCrew={onSelectCrew} />
-      <div className="flex shrink-0 items-center gap-2 px-4 py-2 text-xs">
-        <MessageSquareText className="size-3.5" />
-        <button aria-pressed={!showActivity} className={!showActivity ? 'font-semibold' : 'text-muted-foreground'} onClick={() => setShowActivity(false)}>Conversation</button>
-        <button aria-pressed={showActivity} className={showActivity ? 'font-semibold' : 'text-muted-foreground'} onClick={() => setShowActivity(true)}>Activity</button>
-        <button onClick={jumpToLatest} className="ml-auto whitespace-nowrap text-[11px] underline">Latest ↓</button>
+      <div className="flex shrink-0 items-center gap-2 border-b px-4 py-2 sm:px-5">
+        <div className="segmented-control" role="group" aria-label="Call records">
+          <button aria-pressed={!showActivity} onClick={() => setShowActivity(false)}>Conversation</button>
+          <button aria-pressed={showActivity} onClick={() => setShowActivity(true)}>Activity</button>
+        </div>
+        {!!visibleLines.length && <Button variant="ghost" size="sm" onClick={jumpToLatest} className="ml-auto text-muted-foreground">Latest <ArrowDown className="size-3.5" aria-hidden="true" /></Button>}
       </div>
       <div ref={scroller} role="log" aria-label="Call transcript" tabIndex={0}
         onScroll={(event) => { const el = event.currentTarget; followLatest.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48 }}
-        className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 py-3 [scrollbar-gutter:stable]">
+        className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 py-3 [scrollbar-gutter:stable] sm:px-5">
         <div className="flex min-w-0 flex-col gap-3">
-          {!visibleLines.length && <p className="text-sm text-muted-foreground">No transcript yet.</p>}
+          {!visibleLines.length && <p className="text-sm text-muted-foreground">{ended ? 'No transcript was recorded.' : 'Waiting for the first transcript entry…'}</p>}
           {visibleLines.map((line) => <TranscriptRow key={line.id} line={line} />)}
         </div>
       </div>
       <Separator />
-      {ended ? <div className="shrink-0 bg-muted/30 px-4 py-2 text-xs text-muted-foreground">Call ended · {callDuration(call, now)} · Assistance outcome unconfirmed</div> : <form className="flex shrink-0 items-center gap-2 p-3" onSubmit={(event) => { event.preventDefault(); void send(steerMode) }}>
-        <Input aria-label="Message to the agent" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Message the agent…" disabled={sending} />
-        <select aria-label="Message delivery" title="Inform adds context; Speak requests an immediate spoken update" value={steerMode} onChange={(event) => setSteerMode(event.target.value as 'context' | 'say')} disabled={sending} className="h-8 max-w-24 rounded-lg border bg-background px-1.5 text-xs">
-          <option value="context">Inform</option>
-          <option value="say">Speak</option>
-        </select>
-        <Button type="submit" size="icon" aria-label={steerMode === 'say' ? 'Request spoken update' : 'Inform agent'} title={steerMode === 'say' ? 'Request spoken update' : 'Inform agent'} disabled={!draft.trim() || sending}>
-          <Send className="size-4" />
+      {ended ? <div className="shrink-0 px-4 py-2 text-xs text-muted-foreground">Assistance outcome unconfirmed</div> : <form className="flex shrink-0 items-center gap-2 p-3" onSubmit={(event) => { event.preventDefault(); void send(steerMode) }}>
+        <Input className="min-w-0 flex-1" aria-label="Message to the agent" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Message the agent…" disabled={sending} />
+        <NativeSelect aria-label="Message delivery" title="Inform adds context; Speak requests an immediate spoken update" value={steerMode} onChange={(event) => setSteerMode(event.target.value as 'context' | 'say')} disabled={sending} className="max-w-24 shrink-0" selectClassName="bg-background pl-1.5 text-xs">
+          <NativeSelectOption value="context">Inform</NativeSelectOption>
+          <NativeSelectOption value="say">Speak</NativeSelectOption>
+        </NativeSelect>
+        <Button type="submit" size="icon" aria-busy={sending} aria-label={sending ? 'Sending message' : steerMode === 'say' ? 'Request spoken update' : 'Inform agent'} title={steerMode === 'say' ? 'Request spoken update' : 'Inform agent'} disabled={!draft.trim() || sending}>
+          {sending ? <LoaderCircle className="size-4 motion-safe:animate-spin" aria-hidden="true" /> : <Send className="size-4" aria-hidden="true" />}
         </Button>
       </form>}
 
@@ -228,8 +226,8 @@ const TranscriptRow = memo(function TranscriptRow({ line }: { line: TranscriptLi
   const caller = line.speaker === 'caller'
   return (
     <div className={cn('flex', caller ? 'justify-start' : 'justify-end')}>
-      <div className={cn('min-w-0 max-w-[96%] whitespace-pre-wrap break-words rounded-xl px-3 py-2.5 text-sm leading-relaxed [overflow-wrap:anywhere]', caller ? 'bg-muted' : 'border border-blue-100 bg-blue-50/70 text-foreground')}>
-        <div className={cn('mb-0.5 text-[10px] uppercase tracking-wide', caller ? 'text-muted-foreground' : 'text-blue-700')}>{caller ? 'Caller' : 'AI agent'} <time className="ml-1 normal-case tracking-normal">{new Date(line.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</time></div>
+      <div className={cn('min-w-0 max-w-[95%] whitespace-pre-wrap rounded-lg px-3.5 py-2.5 text-sm leading-relaxed [overflow-wrap:anywhere]', caller ? 'bg-muted' : 'bg-accent')}>
+        <div className="mb-1 flex flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground"><span className={cn('font-semibold', caller ? 'text-foreground' : 'text-accent-foreground')}>{caller ? 'Caller' : 'Voice agent'}</span><time>{new Date(line.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</time></div>
         {line.text}
       </div>
     </div>

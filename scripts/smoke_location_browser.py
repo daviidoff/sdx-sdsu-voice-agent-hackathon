@@ -69,7 +69,7 @@ def render_report(report, out):
                     f'<p><b>Agent:</b> {escape(" ".join(turn["agent"]))}</p>'
                     f'<p><b>Location:</b> {escape(turn["assessment"].get("location", ""))} · {escape(resolution.get("status", ""))}</p>'
                     f'<p><b>Instruction:</b> {escape(turn["instruction"].get("action", ""))} · '
-                    f'<b>Map markers:</b> {len(turn["circle_paths"])} · <b>Turn:</b> {turn["seconds"]}s</p>'
+                    f'<b>Map markers:</b> {len(turn["caller_markers"])} · <b>Turn:</b> {turn["seconds"]}s</p>'
                     f'<img src="{escape(label)}.png" alt="Dashboard after {escape(label)}" /></section>')
     document = ('<!doctype html><html><head><meta charset="utf-8"><title>Location voice test</title>'
                 '<style>body{font:16px/1.5 system-ui;max-width:1100px;margin:40px auto;padding:0 20px;color:#17202b}'
@@ -185,14 +185,14 @@ def main():
                 expected_location = call['assessment'].get('location', '')
                 dashboard.wait_for_function('(location) => document.querySelectorAll("aside")[1]?.innerText.includes(location)', arg=expected_location, timeout=5000)
                 dashboard.wait_for_timeout(1200)
-                circles = dashboard.locator('.leaflet-overlay-pane path').evaluate_all(r'els => els.filter(e=> /a\d+(?:\.\d+)?,\d/.test(e.getAttribute("d") || "")).map(e=>({path:e.getAttribute("d"),stroke:e.getAttribute("stroke"),fill:e.getAttribute("fill")}))')
+                markers = dashboard.locator('.caller-marker').evaluate_all('els => els.map(e => e.title)')
                 detail = dashboard.locator('aside').last.inner_text()
                 turn = {'label': label, 'input': text, 'heard': heard, 'agent': spoken,
                         'tools': [e['client_tool_call']['tool_name'] for e in new_events if e['type']=='client_tool_call'],
                         'seconds': round(time.monotonic()-started,1), 'complete': complete,
-                        'assessment': call['assessment'], 'instruction': instruction, 'circle_paths': circles,
+                        'assessment': call['assessment'], 'instruction': instruction, 'caller_markers': markers,
                         'detail': detail}
-                turn['passed'] = complete and resolution.get('status')==resolution_status and instruction.get('action')==action and len(circles)==int(resolution_status=='resolved')
+                turn['passed'] = complete and resolution.get('status')==resolution_status and instruction.get('action')==action and len(markers)==int(resolution_status=='resolved')
                 if action != 'unknown':
                     turn['passed'] &= ('shelter' if action=='shelter' else 'evacuat') in ' '.join(spoken).lower()
                 if label=='misheard-street':

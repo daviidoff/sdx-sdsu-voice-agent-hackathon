@@ -44,6 +44,8 @@ body{font:15px/1.55 system-ui;background:#f4f6f8;color:#17212b;max-width:1100px;
 <p><b>Checks passed is not a full scenario pass.</b> Read the human rubric and capability gaps. Failed = observed assertion failure; blocked = missing capability/configuration; review = automated checks passed, semantic review remains.</p>'''
     text += '<p>'+escape(json.dumps(report['counts']))+'</p><details><summary>Run configuration and limitations</summary><pre>'+escape(json.dumps(report.get('metadata',{}),indent=2))+'</pre></details>'
     metadata=report.get('metadata',{})
+    for finding in metadata.get('followup_findings',[]):
+        text += '<p class="bad"><b>Follow-up finding:</b> '+escape(finding)+'</p>'
     configurations=metadata.get('shards',[metadata])
     if any(m.get('agent_configuration_changed_during_run') or m.get('source_files_changed_during_run') for m in configurations):
         text+='<p class="bad"><b>Configuration drift detected.</b> The deployed agent or source files changed while these conversations ran. These are exploratory observations, not a stable regression baseline. Inspect the recorded start/end hashes before comparing scores.</p>'

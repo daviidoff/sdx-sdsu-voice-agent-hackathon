@@ -1,5 +1,5 @@
 import type {Conversation as VoiceSession} from '@elevenlabs/client';
-import {phoneShell} from './phone-shell.ts';
+import {phoneShell, renderPhoneCall} from './phone-shell.tsx';
 import {waitForStartup} from './startup.ts';
 
 type Session = {id: string; status: string; facility_name: string};
@@ -9,7 +9,8 @@ const terminal = (status: string) => ['completed', 'failed', 'cancelled', 'inter
 export async function mountClinicPhone(facilityId: string, loadVoice = () => import('@elevenlabs/client')) {
   const $ = <T extends HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
   let clinic: Clinic | undefined, session: Session | undefined, voice: VoiceSession | undefined;
-  let startup: AbortController | undefined, busy = false, muted = false, quiet = false;
+  let startup: AbortController | undefined, busy = false, muted = false, quiet = false, speaking = false;
+  let loadingClinic = true;
   let state = 'Loading clinic…', error = '', owned = false, generation = 0, reloadRequired = false;
   let transcriptQueue: Promise<unknown> = Promise.resolve();
   let poll: ReturnType<typeof setInterval> | undefined;
@@ -24,25 +25,20 @@ export async function mountClinicPhone(facilityId: string, loadVoice = () => imp
     return response.json();
   }
   function render() {
-    $('#voice-state').textContent = state;
     $('#error').textContent = error; $('#error').hidden = !error;
-    $('#clock').textContent = new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-    $('#configuration-note').textContent = !clinic ? 'Loading the selected clinic…' : !clinic.voice_configured
-      ? 'The clinic outreach agent needs configuration.' : `You are reception at ${clinic.name}. The outreach agent asks about your situation and reads back what you report. Transcript and reported needs appear in the dashboard.`;
-    const button = $<HTMLButtonElement>('#call-toggle');
-    button.disabled = !clinic?.voice_configured || (busy && !startup);
-    button.classList.toggle('end', !!voice || !!startup);
-    button.classList.toggle('connecting', !!startup);
-    const label = startup ? 'Cancel' : reloadRequired ? 'Reload' : busy ? 'Ending…' : voice ? 'End call' : 'Respond as clinic';
-    button.setAttribute('aria-label', label); $('#call-label').textContent = label;
-    $('#voice-visual').classList.toggle('active', !!voice);
-    $('#voice-visual').classList.toggle('muted', muted);
-    for (const [id, pressed] of [['mic', muted], ['audio', quiet]] as const) {
-      $<HTMLButtonElement>(`#${id}-toggle`).disabled = !voice;
-      $(`#${id}-toggle`).setAttribute('aria-pressed', String(pressed));
-    }
-    $('#mic-label').textContent = muted ? 'unmute' : 'mute';
-    $('#audio-label').textContent = quiet ? 'unmute audio' : 'speaker';
+    $('#configuration-note').textContent = !clinic ? '' : !clinic.voice_configured
+      ? 'The clinic outreach agent needs configuration.' : 'Play the clinic receptionist. The dashboard shows the transcript and reported needs.';
+    const ending = busy && !startup;
+    renderPhoneCall({
+      status: ending ? 'Ending call…' : voice && muted && !speaking ? 'Microphone muted' : state,
+      label: startup ? 'Cancel' : reloadRequired ? 'Reload' : ending || voice ? 'End call' : 'Respond as clinic',
+      disabled: !clinic?.voice_configured || ending,
+      phase: loadingClinic ? 'loading' : startup ? 'connecting' : ending ? 'ending' : voice ? 'active' : 'idle',
+      speaking,
+      audioReady: !!voice && !startup && !ending,
+      micMuted: muted,
+      speakerMuted: quiet,
+    });
   }
   const showError = (e: unknown) => {error = e instanceof Error ? e.message : String(e); render();};
   async function finish(status: 'completed' | 'failed' | 'cancelled' = 'completed') {
@@ -61,7 +57,7 @@ export async function mountClinicPhone(facilityId: string, loadVoice = () => imp
   }
   async function start() {
     if (busy || voice || !clinic) return;
-    busy = true; error = ''; muted = false; quiet = false; session = undefined; owned = false;
+    busy = true; error = ''; muted = false; quiet = false; speaking = false; session = undefined; owned = false;
     transcriptQueue = Promise.resolve();
     const attempt = new AbortController(), current = ++generation; startup = attempt;
     let deadline: ReturnType<typeof setTimeout> | undefined, sdkStarted = false;
@@ -96,7 +92,11 @@ export async function mountClinicPhone(facilityId: string, loadVoice = () => imp
           persist(role, message.message, `${role}:${message.response_id ?? message.event_id}`);
         },
         onAgentResponseCorrection: (message: {corrected_agent_response: string; event_id: number; response_id?: string}) => persist('agent', message.corrected_agent_response, `agent:${message.response_id ?? message.event_id}`),
-        onModeChange: ({mode}) => {if (generation === current && !attempt.signal.aborted) stage(mode === 'speaking' ? 'Outreach agent speaking' : 'Listening to the clinic');},
+        onModeChange: ({mode}) => {
+          if (generation !== current || attempt.signal.aborted) return;
+          speaking = mode === 'speaking';
+          if (!startup) stage(speaking ? 'Outreach agent speaking' : 'Listening to the clinic');
+        },
         onError: message => {if (generation === current) showError(message);},
         onDisconnect: () => {
           if (generation !== current || attempt.signal.aborted) return;
@@ -115,7 +115,7 @@ export async function mountClinicPhone(facilityId: string, loadVoice = () => imp
         },
       }), attempt.signal, late => late.endSession());
       session = await waitForStartup(api<Session>(path + '/connected', {}), attempt.signal);
-      readyResolve(); stage('Connected · you are the clinic');
+      readyResolve(); stage(speaking ? 'Outreach agent speaking' : 'Listening to the clinic');
       let polling = false;
       poll = setInterval(() => {
         if (polling || generation !== current) return;
@@ -151,8 +151,10 @@ export async function mountClinicPhone(facilityId: string, loadVoice = () => imp
   shell('Clinic outreach');
   try {
     clinic = await api<Clinic>(`/api/contacts/${encodeURIComponent(facilityId)}/demo-call`);
-    state = 'Incoming outreach call'; shell(clinic.name);
-  } catch (e) {state = 'Clinic unavailable'; showError(e);}
+    loadingClinic = false;
+    state = clinic.voice_configured ? 'Incoming outreach call' : 'Voice unavailable';
+    shell(clinic.name);
+  } catch (e) {loadingClinic = false; state = 'Clinic unavailable'; showError(e);}
   window.addEventListener('beforeunload', () => {
     ++generation; startup?.abort(); clearInterval(poll);
     if (session && owned) navigator.sendBeacon(prefix(session.id) + '/end', new Blob([JSON.stringify({status: voice ? 'completed' : 'cancelled'})], {type: 'application/json'}));

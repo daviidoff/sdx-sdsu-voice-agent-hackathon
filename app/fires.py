@@ -1,4 +1,4 @@
-"""Static, operator-drawn demo fires. These never create caller instructions."""
+"""Persist operator-drawn ignition areas for the dashboard wildfire simulation."""
 import json
 from typing import Literal
 

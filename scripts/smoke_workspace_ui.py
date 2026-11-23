@@ -96,18 +96,19 @@ async def run(base_url):
         assert len(requests) == count, 'An incomplete instruction was submitted'
         await instruction.fill('Final saved edit')
         await expect(detail.get_by_role('status')).to_have_text('Saved · live', timeout=5000)
-        await page.get_by_role('button', name='Inbox', exact=True).click()
+        toolbar = page.get_by_role('navigation', name='Workspace', exact=True)
+        await toolbar.get_by_role('button', name='Inbox', exact=True).click()
         inbox = page.get_by_role('region', name='Inbox panel', exact=True)
         await expect(inbox).to_be_visible()
         await inbox.get_by_role('button', name='Close Inbox', exact=True).click()
         out = ROOT / '.runtime' / 'ui-workspace'
         out.mkdir(parents=True, exist_ok=True)
         await page.screenshot(path=str(out / 'panels-desktop.png'))
-        for width, height in [(1024, 768), (768, 1024), (390, 844), (320, 640)]:
+        for width, height in [(1024, 768), (768, 1024), (500, 800), (390, 844), (320, 640)]:
             await page.set_viewport_size({'width': width, 'height': height})
             await page.wait_for_timeout(100)
             assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth'), f'Page overflows at {width}px'
-            for control in await page.locator('header.dashboard-header button, header.dashboard-header a, nav[aria-label="Workspace"] button').all():
+            for control in await toolbar.get_by_role('button').all():
                 if await control.is_visible():
                     box = await control.bounding_box()
                     assert box['x'] >= 0 and box['x'] + box['width'] <= width + 1, ('clipped toolbar', width, box)

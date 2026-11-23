@@ -61,7 +61,7 @@ def test_identical_overlaps_provide_guidance_without_escalation(client):
     assert result['action'] == 'warning'
     assert result['match_status'] == 'overlap_agreement'
     assert result['matching_zone_ids'] == ['a', 'b']
-    assert client.get(path + '/operator-messages').json()['messages'] == []
+    assert not [m for m in client.get(path + '/operator-messages').json()['messages'] if m['payload'].get('source') != 'zone_update']
 
 
 def test_conflict_escalates_once_and_operator_selects_versioned_guidance(client):
@@ -73,7 +73,7 @@ def test_conflict_escalates_once_and_operator_selects_versioned_guidance(client)
         result = client.post(path + '/resolve', json={'location': 'Test Area'}).json()
         assert result['action'] == 'unknown'
         assert result['operator_receipt']['status'] == 'received'
-    assert len(client.get(path + '/operator-messages').json()['messages']) == 1
+    assert len([m for m in client.get(path + '/operator-messages').json()['messages'] if m['payload'].get('source') == 'backend']) == 1
     call = client.get(path).json()
     assert client.post(path + '/operator-instruction', json={'zone_id': 'b', 'revision': -1}).status_code == 409
     assert client.post(path + '/operator-instruction', json={'zone_id': 'elsewhere', 'revision': call['revision']}).status_code == 422
@@ -86,12 +86,12 @@ def test_conflict_escalates_once_and_operator_selects_versioned_guidance(client)
     zone(client, text='TEST: new conflicting guidance.')
     updated = client.get(path).json()
     assert updated['instruction']['action'] == 'unknown'
-    assert len(client.get(path + '/operator-messages').json()['messages']) == 2
+    assert len([m for m in client.get(path + '/operator-messages').json()['messages'] if m['payload'].get('source') == 'backend']) == 2
     client.post(path + '/operator-instruction', json={'zone_id': 'b', 'revision': updated['revision']})
     client.post(path + '/resolve', json={'location': 'Different area'})
     returned = client.post(path + '/resolve', json={'location': 'Test Area'}).json()
     assert returned['action'] == 'unknown'
-    assert len(client.get(path + '/operator-messages').json()['messages']) == 3
+    assert len([m for m in client.get(path + '/operator-messages').json()['messages'] if m['payload'].get('source') == 'backend']) == 3
 
 
 def test_inbox_and_read_state_survive_restart(tmp_path, monkeypatch):

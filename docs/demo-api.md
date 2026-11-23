@@ -20,7 +20,8 @@ Run `./scripts/run-demo.sh` from the repository root. The interface is on `http:
 | `GET /api/calls/{id}/events` | SSE feed; reconnect with `Last-Event-ID`. |
 | `POST /api/calls/{id}/messages` | `{text}` advances the deterministic mock conversation. |
 | `POST /api/calls/{id}/transcript` | `{role: "user" or "agent", text, segment_id?, replace?}` stores live SDK transcript events and corrections. |
-| `POST /api/calls/{id}/resolve` | `{location}` resolves a caller-confirmed current location. |
+| `POST /api/calls/{id}/location-proposal` | `{location}` records a pending reported place, clears previous current guidance/coordinates, preserves needs/history, and returns `reported_zone` with the completed geographic lookup and provisional instruction. Ask about returned candidates before routine intake. A subsequent caller turn is required before resolving the proposal. |
+| `POST /api/calls/{id}/resolve` | `{location}` resolves a caller-confirmed current location. If a proposal is pending, a later caller transcript turn must exist. For an unresolved/ambiguous proposal, the caller may clarify the name/city/address and the full clarified place can be resolved directly; other pending proposals must match. Semantic confirmation remains the agent's responsibility. |
 | `POST /api/calls/{id}/assessment` | Merge confirmed intake fields. |
 | `POST /api/calls/{id}/steering` | `{text}` queues operator context. |
 | `POST /api/calls/{id}/operator-messages` | `{text, request_id}` saves an agent message and returns `{status:"received", message_id, thread_id, notice}`. Retries reuse the request ID; changed text with the same ID is rejected. |

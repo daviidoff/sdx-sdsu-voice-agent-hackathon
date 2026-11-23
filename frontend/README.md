@@ -1,8 +1,8 @@
 # Connected operator dashboard
 
 Run `./scripts/run-demo.sh` from the repository root and open
-[the dashboard](http://127.0.0.1:8000/dashboard/). Use **Open voice caller** to start an ElevenLabs
-browser session against the same backend. For frontend development, `npm ci && npm run dev` serves
+[the dashboard](http://127.0.0.1:8000/dashboard/). Open [the voice caller](http://127.0.0.1:8000/) to start
+an ElevenLabs browser session against the same backend. For frontend development, `npm ci && npm run dev` serves
 `http://127.0.0.1:5174/dashboard/` and proxies `/api` to port 8000; open the phone separately on port 8000.
 
 Calls, transcripts, confirmed facts, and background results come from the durable voice API. The feed
@@ -58,15 +58,21 @@ Validation: `tests/test_contacts.py`, `frontend/tests/contacts.test.mjs`, and
 real ElevenLabs speech output and a typed, explicitly mock receptionist; it does not validate
 physical microphone capture. Run an offline contact search before this smoke check.
 
-### Static fire editor
+### Wildfire simulation on OpenStreetMap
 
-Use **Add fire** on the map, click at least three perimeter corners, then **Finish**
-and **Save fire**. The abstract orange polygon uses the original dashboard fire styling.
-Saved simulated fires persist in SQLite and appear across dashboard refreshes. Click a
-fire to rename it, redraw its perimeter, or delete it. **Undo**, **Cancel**, and Escape
-are available while drawing. Fires stay fixed and do not publish caller instructions;
-use instruction zones separately. The snapshot includes `fires`; edits use
-`POST /api/dashboard/fires` and `DELETE /api/dashboard/fires/{id}`.
+Choose **Add fire**, draw the ignition area, then choose **Finish** and **Start simulation**.
+SQLite stores the ignition area. The dashboard derives the spreading footprint
+from simulated wind, fuel and ground distance in metres. The drawn polygon seeds the simulation grid directly. Two charcoal tones mark its burned interior. The red margin and coral teeth
+mark its advancing side and fade as the simulation cools. After burnout, playback repeats from the drawn ignition. A refresh resumes the current cycle in the same tab.
+Click the current footprint to edit or replay the fire. Operator instruction zones supply caller guidance.
+
+Streets uses OSM Shortbread vector tiles. MapLibre renders the incident GeoJSON between
+land cover and the reference layers for water, buildings, streets and labels. Aerial adds
+USGS imagery to the same style. Leaflet handles navigation, drawing, markers and instruction
+zones. The map uses raster tiles and the same fire geometry when the vector renderer is
+unavailable. Set `VITE_OSM_STYLE_URL` to use another compatible style and tile service.
+The browser requests visible tiles directly and displays attribution for the map sources.
+[OSM tile policy](https://operations.osmfoundation.org/policies/vector/) · [MapLibre layer ordering](https://maplibre.org/maplibre-gl-js/docs/API/classes/Map/#addlayer)
 
 ### Crew simulation
 
@@ -80,7 +86,7 @@ Drag a panel by its header or resize from the lower-right corner. The focused he
 handle also support arrow keys. Close panels with **×** and reopen them from the workspace toolbar;
 **Map only** clears the map and **Reset layout** restores the default arrangement. On smaller screens,
 the active panel becomes a bottom sheet. Contacts, Calls and Areas switch the overview; selecting a
-record opens its details. The Inbox opens as a movable panel.
+record opens its details. **Inbox** sits at the right end of the toolbar with an unread count and opens as a movable panel.
 
 UI regression check: `.venv/bin/python scripts/smoke_workspace_ui.py` from the repository root.
 It checks panel interactions, mobile sizes, serialized autosave, close-during-save and failed-save retry

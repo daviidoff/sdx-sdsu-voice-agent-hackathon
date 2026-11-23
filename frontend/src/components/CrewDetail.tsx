@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Accessibility, PhoneCall, Radio, Truck } from 'lucide-react'
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -69,10 +70,10 @@ export function CrewDetail({
         <div className="space-y-2 p-4">
           <div className="space-y-2 rounded-lg border p-3">
             <label htmlFor="crew-destination" className="text-sm font-medium">Route to a point of interest</label>
-            <select id="crew-destination" className="w-full rounded-md border bg-background p-2 text-sm" value={destination} onChange={(event) => setDestination(event.target.value)}>
-              <option value="">Choose a destination…</option>
-              {destinations.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-            </select>
+            <NativeSelect id="crew-destination" className="w-full" selectClassName="h-auto bg-background py-2 pl-2" value={destination} onChange={(event) => setDestination(event.target.value)}>
+              <NativeSelectOption value="">Choose a destination…</NativeSelectOption>
+              {destinations.map((f) => <NativeSelectOption key={f.id} value={f.id}>{f.name}</NativeSelectOption>)}
+            </NativeSelect>
             {!destinations.length && <p className="text-xs text-muted-foreground">Find contacts with map locations to use as destinations.</p>}
             <Button size="sm" disabled={!chosen} onClick={() => { if (chosen) onRoute(chosen) }}>Set simulated route</Button>
             <p className="text-xs text-muted-foreground">Routes do not account for disaster conditions.</p>

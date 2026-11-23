@@ -1,17 +1,9 @@
-import { Polygon, Tooltip } from 'react-leaflet'
+import { Polygon } from 'react-leaflet'
 import type { SimulatedFire } from '@/types'
 
-// Match the original dashboard's abstract fire overlay, with one static perimeter.
-export function FirePerimeter({ fire, selected, drawing, onSelect }: {
-  fire: SimulatedFire; selected: boolean; drawing: boolean; onSelect: () => void
-}) {
-  return <Polygon
-    key={String(drawing)}
-    positions={fire.polygon}
-    interactive={!drawing}
-    eventHandlers={{ click: onSelect }}
-    pathOptions={{ color: '#ea580c', weight: selected ? 3 : 2, fillColor: '#f97316', fillOpacity: 0.5 }}
-  >
-    <Tooltip sticky><strong>{fire.label}</strong><br />Simulated fire · static perimeter · click to edit</Tooltip>
-  </Polygon>
+// The drawn seed is shown while editing. Selection uses the current fire footprint.
+export function FirePerimeter({ fire, draft = false }: { fire: SimulatedFire; draft?: boolean }) {
+  return <Polygon positions={fire.polygon} interactive={false}
+    pathOptions={{ color: draft ? '#db8c1b' : '#a36a24', dashArray: '4 5', weight: draft ? 2 : 1,
+      opacity: draft ? 0.95 : 0.65, fillOpacity: draft ? 0.06 : 0 }} />
 }

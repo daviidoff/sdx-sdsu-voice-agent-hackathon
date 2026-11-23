@@ -29,9 +29,9 @@ Copy `.env.example` to `.env` and set `ELEVENLABS_API_KEY` locally. Never put AP
 .venv/bin/python scripts/configure_elevenlabs.py
 ```
 
-The first command previews the configuration without contacting ElevenLabs. The second creates three client tools and one new private agent; it does not modify existing agents. Add the printed `ELEVENLABS_AGENT_ID` to `.env` and restart the server. Then press the phone call button and allow microphone access. Browser sign-in alone does not supply application API credentials.
+The first command previews the configuration without contacting ElevenLabs. The second creates six client tools and one new private agent; it does not modify existing agents. Add the printed `ELEVENLABS_AGENT_ID` to `.env` and restart the server. Then press the phone call button and allow microphone access. Browser sign-in alone does not supply application API credentials.
 
-If using an existing agent, configure the prompt and three client tools described by the dry-run output. Their names and parameter names must match exactly. Public agents can connect with an agent ID alone; private agents require the server API key to mint a short-lived signed URL. The key never reaches the browser. The circular call control is our UI connected through the official ElevenLabs JavaScript SDK.
+If using an existing agent, configure the prompt and six client tools described by the dry-run output. Their names and parameter names must match exactly. Public agents can connect with an agent ID alone; private agents require the server API key to mint a short-lived signed URL. The key never reaches the browser. The circular call control is our UI connected through the official ElevenLabs JavaScript SDK.
 
 No public tunnel is needed for this browser demo: client tools call the local backend from the browser. Live microphone audio goes directly to ElevenLabs. Context updates are non-interrupting and do not prove the caller has heard a changed instruction.
 
@@ -94,7 +94,7 @@ backend with an offline contact search and run `scripts/smoke_contacts.py --base
 ### Dashboard integration
 
 The dashboard from GitHub `main` (`a83428b`) is integrated with the voice backend.
-`./scripts/run-demo.sh` builds both interfaces. Open `/dashboard/`, then **Open voice caller**.
+`./scripts/run-demo.sh` builds both interfaces. Open `/dashboard/` for the operator dashboard and `/` for the voice caller.
 The phone interface always uses dashboard context. The debug inspector links to the dashboard for zone management; the old synthetic-area editor and fixture-mode URL switch have been removed.
 
 The dashboard reads persisted calls, corrected transcripts, confirmed intake, background-job results,
@@ -176,3 +176,24 @@ call. `scripts/configure_elevenlabs.py --update-existing` attaches the inbox cli
 recorded dedicated agent while preserving existing tools. `scripts/smoke_inbox.py --base-url
 http://127.0.0.1:8013` exercises the real provider on an isolated test backend, using typed inputs
 and generated audio. It must not be pointed at a real incident database.
+
+## Text-only behavior evaluation
+
+See [the evaluation runner](evaluation/README.md), [research and test cases](test%20cases.md), and [findings and remaining reliability issues](docs/evaluation-findings.md). The runner tests the deployed model and real dashboard with isolated synthetic data, without transcription or audio.
+
+### Hospital clarification voice regression
+
+Location lookup now completes inside `propose_location` so its tool response includes
+map candidates. For ambiguous names, ask which hospital/city the caller means; pass
+their clarified place directly to `confirm_location` and relay the current operator
+area instruction before continuing intake. A clarification does not require another
+proposal and yes/no loop. Unknown locations never inherit the previous area's order.
+
+Run `.venv/bin/python -m scripts.smoke_hospital_browser --repeat 3` after building both
+clients and applying `scripts/configure_elevenlabs.py --update-existing`. This uses
+Chromium and the production voice page, generated speech through its microphone
+stream, real ElevenLabs ASR/LLM/TTS, real geocoding, and an isolated copy of the zones
+from port 8000. It verifies hospital clarification, spoken instructions, an operator
+update, and a correction to the other campus. Reports, dashboard screenshots, and
+agent WAV recordings are saved under `.runtime/hospital-browser-*`. Physical
+microphone hardware and a human listening test are separate from this check.

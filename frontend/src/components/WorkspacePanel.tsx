@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, PointerEvent, ReactNode } from 'react'
 import { GripHorizontal, Maximize2, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 /** Floating desktop window; a single focused bottom sheet on smaller screens. */
-export function WorkspacePanel({ title, side = 'left', open, active, onFocus, onClose, children, resetKey = 0 }: {
-  title: string; side?: 'left' | 'right'; open: boolean; active: boolean
+export function WorkspacePanel({ title, controlName = title, side = 'left', open, active, onFocus, onClose, children, resetKey = 0 }: {
+  title: string; controlName?: string; side?: 'left' | 'right'; open: boolean; active: boolean
   onFocus: () => void; onClose: () => void; children: ReactNode; resetKey?: number
 }) {
   const panel = useRef<HTMLElement>(null)
@@ -45,7 +46,7 @@ export function WorkspacePanel({ title, side = 'left', open, active, onFocus, on
   }
   const stop = () => { gesture.current = null }
   const style: CSSProperties = rect ? { left: rect.x, top: rect.y, width: rect.width, height: rect.height, right: 'auto', bottom: 'auto' } : {}
-  return <section ref={panel} aria-label={`${title} panel`} hidden={!open} data-active={active} data-side={side}
+  return <section ref={panel} aria-label={`${controlName} panel`} hidden={!open} data-active={active} data-side={side} data-positioned={Boolean(rect)}
     className="workspace-panel" style={style} onPointerDownCapture={onFocus} onFocusCapture={onFocus}>
     <header className="workspace-panel-handle" tabIndex={0} aria-label={`Move ${title} panel with arrow keys`}
       onKeyDown={(event) => {
@@ -56,12 +57,12 @@ export function WorkspacePanel({ title, side = 'left', open, active, onFocus, on
         setRect(constrain({ x: node.offsetLeft + (event.key === 'ArrowRight' ? 24 : event.key === 'ArrowLeft' ? -24 : 0), y: node.offsetTop + (event.key === 'ArrowDown' ? 24 : event.key === 'ArrowUp' ? -24 : 0), width: node.offsetWidth, height: node.offsetHeight }))
       }} onPointerDown={(e) => start(e, 'move')} onPointerMove={move} onPointerUp={stop} onPointerCancel={stop} onLostPointerCapture={stop}>
       <GripHorizontal className="panel-grip size-4 text-muted-foreground" aria-hidden="true" />
-      <h2 className="min-w-0 flex-1 truncate text-xs font-semibold">{title}</h2>
-      <button className="panel-icon panel-reset" aria-label={`Reset ${title} position`} title="Reset position and size" onClick={() => setRect(undefined)}><Maximize2 className="size-3.5" /></button>
-      <button className="panel-icon" aria-label={`Close ${title}`} title="Close panel" onClick={onClose}><X className="size-4" /></button>
+      <h2 className="min-w-0 flex-1 text-balance text-sm leading-tight font-semibold">{title}</h2>
+      <Button variant="ghost" size="icon" className="panel-icon panel-reset" aria-label={`Reset ${title} position`} title="Reset position and size" onClick={() => setRect(undefined)}><Maximize2 className="size-3.5" /></Button>
+      <Button variant="ghost" size="icon" className="panel-icon" aria-label={`Close ${controlName}`} title="Close panel" onClick={onClose}><X className="size-4" /></Button>
     </header>
     <div className="min-h-0 min-w-0 flex-1 overflow-auto">{children}</div>
-    <div role="separator" aria-label={`Resize ${title}`} aria-orientation="horizontal" tabIndex={0} className="panel-resize"
+    <div role="separator" aria-label={`Resize ${controlName}`} aria-orientation="horizontal" tabIndex={0} className="panel-resize"
       onPointerDown={(e) => start(e, 'resize')} onPointerMove={move} onPointerUp={stop} onPointerCancel={stop} onLostPointerCapture={stop}
       onKeyDown={(event) => {
         if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return

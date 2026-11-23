@@ -58,7 +58,7 @@ def test_published_dashboard_instructions_flow_to_matching_voice_calls(client):
     call = client.get(path).json()
     assert first['version'] == call['instruction']['version'] == 1
     assert call['instruction']['source'] == 'dashboard'
-    assert call['events'][-1]['type'] == 'instruction.updated'
+    assert next(e for e in reversed(call['events']) if e['type'] == 'instruction.updated')['payload'] == call['instruction']
     assert client.get(other).json()['instruction']['action'] == 'unknown'
     assert publish(client, instruction='Updated test instruction')['version'] == 2
     assert client.get(path).json()['instruction']['text'] == 'Updated test instruction'
@@ -94,8 +94,7 @@ def test_delete_instruction_refreshes_live_calls_and_preserves_history(client):
     assert current['instruction']['action'] == 'unknown'
     assert current['instruction']['zone_id'] is None
     assert current['revision'] == before['revision'] + 1
-    assert current['events'][-1]['type'] == 'instruction.updated'
-    assert current['events'][-1]['payload'] == current['instruction']
+    assert next(e for e in reversed(current['events']) if e['type'] == 'instruction.updated')['payload'] == current['instruction']
     assert client.get(ended).json() == history
     assert client.get(other).json() == unrelated
     assert client.delete('/api/dashboard/zones/team-zone').status_code == 404

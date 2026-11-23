@@ -1,5 +1,7 @@
 import type { Call, Responder } from '@/types'
 
+export const ENDED_CALL_COLOR = '#64748b'
+
 export const SITUATION: Record<Call['situation'], { label: string; color: string; badge: string }> = {
   unknown: { label: 'Needs unconfirmed', color: '#64748b', badge: 'bg-slate-100 text-slate-700' },
   trapped: { label: 'Trapped', color: '#dc2626', badge: 'bg-red-50 text-red-800' },

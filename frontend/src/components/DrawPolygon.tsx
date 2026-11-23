@@ -55,9 +55,9 @@ export function DrawPolygon({ onDone, onCancel, label = 'Instruction zone' }: { 
     >
       <Tooltip>{index === 0 && canFinish ? 'Click to close polygon' : `Point ${index + 1}`}</Tooltip>
     </CircleMarker>)}
-    <div className="absolute top-3 left-3 right-3 z-[1000] w-fit max-w-[calc(100%-1.5rem)] rounded-lg border border-red-300 bg-background/95 p-2 text-xs shadow-sm"
+    <div className="map-surface absolute top-3 right-14 left-3 z-[1000] w-fit max-w-[calc(100%-4.25rem)] p-2 text-xs"
       ref={(element) => { if (element) { L.DomEvent.disableClickPropagation(element); L.DomEvent.disableScrollPropagation(element) } }}>
-      <div role="status" className="mb-2 flex items-center gap-2"><PencilRuler className="size-3.5 shrink-0 text-red-600" />
+      <div role="status" className="mb-2 flex items-center gap-2"><PencilRuler className="size-3.5 shrink-0 text-destructive" />
         {label} · {points.length < 3 ? `Click the map to add corners · ${points.length}/3 minimum` : 'Add corners, then Finish or click the first point.'}
       </div>
       <div className="flex flex-wrap items-center gap-1">
