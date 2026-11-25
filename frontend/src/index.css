@@ -281,6 +281,41 @@
   color: var(--popover-foreground);
 }
 .map-symbol.is-selected svg { width: 30px; height: 30px; stroke-width: 2.25; }
+.map-assistance-label {
+  position: absolute;
+  bottom: calc(100% + 3px);
+  left: calc(50% - var(--caller-pin-offset, 0px));
+  transform: translateX(-50%);
+  padding: 3px 8px;
+  border: 1px solid #f5b76b;
+  border-radius: 6px;
+  background: #fff7e8;
+  color: #793b0a;
+  box-shadow: 0 1px 4px #3c211624;
+  font: 650 12px/1.35 var(--font-sans);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.map-assistance-label.is-historical { background: #f8fafc; border-color: #cbd5e1; color: #475569; }
+@media (prefers-reduced-motion: no-preference) {
+  .assistance-ping::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    left: calc(0px - var(--caller-pin-offset, 0px));
+    right: var(--caller-pin-offset, 0px);
+    border: 2px solid #bd5309;
+    border-radius: 50%;
+    pointer-events: none;
+    animation: assistance-ring 1.25s ease-out 4 both;
+  }
+  @keyframes assistance-ring {
+    from { opacity: .9; transform: scale(.7); }
+    to { opacity: 0; transform: scale(2.1); }
+  }
+}
+/* The clickable phone is offset from a co-located facility. Keep the alert on the building. */
+.caller-marker-shared { --caller-pin-offset: 34px; }
 .caller-marker-shared::before {
   content: '';
   position: absolute;

@@ -38,6 +38,14 @@ test('old jobs and events from another call never enter voice context', () => {
   assert.match(voiceContext({call_id: 'current', type: 'job.completed', payload: {revision: 7, result: 'current'}}, call), /current/);
 });
 
+test('a background headcount request leaves the caller’s immediate help request first', () => {
+  const event = {call_id: call.id, type: 'job.completed', payload: {revision: 7, result: {missing_fields: ['people_count']}}};
+  const context = voiceContext(event, {...call, assessment: {can_evacuate: false}});
+  assert.match(context, /operator planning/);
+  assert.match(context, /current request first/);
+  assert.match(context, /people_count/);
+});
+
 // Operator messages use the supported turn trigger but are never caller evidence.
 import {operatorTurnMessage, OperatorTurnGuard} from '../src/voice-context.ts';
 

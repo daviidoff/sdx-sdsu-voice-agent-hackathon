@@ -1,10 +1,53 @@
-# Browser-call demo and dashboard handoff
+# Browser demo API
 
-Implemented direction: local browser calls first; real phone service deferred. The central backend owns durable call state. Dashboard fixtures are replaceable data, and the dashboard does not need to own the voice connection. This implementation is a demo, not an operational emergency service.
+FastAPI stores call state in SQLite. The browser handles live audio, and the operator dashboard uses the same API to read transcripts, publish area instructions, and reply to agents.
 
-## Run and discover
+## Local demo
 
-Run `./scripts/run-demo.sh` from the repository root. The interface is on `http://localhost:8000`, interactive API docs on `/docs`, and the machine-readable contract on `/openapi.json`. The main page contains the live voice phone screen; `/?debug=1` opens the separate responder debug console. The deterministic conversation endpoint remains available for automated backend checks but is not exposed as a phone mode. SQLite is local to the server; other components use the API, not the database file. The separate `crawler/` package is not coupled to this mock API.
+Run `./scripts/run-demo.sh` from the repository root. The dashboard runs without provider credentials. Explore the [operator dashboard](http://localhost:8000/dashboard/) or the [interactive API reference](http://localhost:8000/docs).
+
+## Voice setup
+
+After running the demo script once, create a local `.env` from `.env.example` if needed and set `ELEVENLABS_API_KEY`. From the repository root, create the intake and outreach agents in your ElevenLabs account.
+
+```sh
+.venv/bin/python scripts/configure_elevenlabs.py
+.venv/bin/python scripts/configure_outreach.py
+```
+
+Add the `ELEVENLABS_AGENT_ID` printed by the first command to `.env`. The outreach script stores its agent ID locally. Restart the demo and allow microphone access when prompted.
+
+- For intake, open the [browser caller](http://localhost:8000/). To try location-specific guidance, first publish an instruction zone on the dashboard and use a location inside it during the call.
+- For outreach, select a discovered clinic in **Contacts**, choose **Open clinic caller**, then **Respond as clinic**. The participant plays reception in a browser simulation.
+
+## Record the Central Library call
+
+Run `./scripts/run-demo.sh --assistance-call` with the existing intake agent ID and an ElevenLabs key. In the key settings, select **Access** for **Text to Speech** and **Write** for **ElevenAgents**. ElevenLabs requires the latter to start a signed browser conversation. The exercise starts on port 8018 with an isolated database, six simulated calls in the queue, and an evacuation instruction for the mapped library at 330 Park Boulevard, San Diego.
+
+With FFmpeg and ffprobe on your path, run these commands in a second terminal.
+
+```sh
+.venv/bin/python -m pip install -r evaluation/requirements.txt
+.venv/bin/python -m playwright install chromium
+.venv/bin/python -m scripts.record_assistance_call
+```
+
+The caller uses Baxter, a calm Australian male voice. The intake agent speaks in its own configured voice. If it already uses Baxter, the caller uses Eldrin, a British baritone. On a successful live call, the exported MP4 includes both speakers. [Baxter in the ElevenLabs Voice Library](https://elevenlabs.io/app/voice-library?voiceId=jSuBIjxMKhqIfb0wCK1F)
+
+The recorder checks that the agent reads back a single location, obtains confirmation, gives the published instruction, and records the caller’s inability to leave independently. It checks the operator inbox receipt and the assistance marker at the library before exporting. The output directory under `.runtime/library-call-*` contains the film, the two dashboard screenshots, and the call record.
+
+### Film the library call
+
+Set `CALL_TAKE` to the output directory printed by the live recorder. With the caller and dashboard built and the WebP tools `cwebp` and `img2webp` on your path, run
+
+```sh
+.venv/bin/python -m scripts.demo.record_operator "$CALL_TAKE" --out .runtime/library-operator
+.venv/bin/python -m scripts.demo.render_operator .runtime/library-operator
+```
+
+The first command starts a fresh local exercise and replays the saved session’s voices, transcript and tool sequence through the browser caller. It records the operator opening the call, the library pin pulsing and the agent acknowledging the request. The recorder checks the map marker and the saved operator inbox receipt. It uses the saved audio without ElevenLabs credentials.
+
+The export under `.runtime/library-operator/export` includes the 1080p movie with selectable English captions, three dashboard stills and the animated README preview. Both voices play at their original speed. For the README cut, the last acknowledgement finishes 4.9 seconds into the final agent clip. Passing `--acknowledgement-seconds 4.9` to the renderer ends the film in the pause before the follow-up question.
 
 ## HTTP contract
 
@@ -36,7 +79,7 @@ Run `./scripts/run-demo.sh` from the repository root. The interface is on `http:
 
 Scenario IDs include `wildfire-north`, `river-park`, `lake-view`, and `unknown-location`. Instruction zones are `north-ridge`, `river-park`, and `lake-view`; actions are `evacuate`, `shelter`, or `unknown`. Fixture matching is not real geocoding. The caller's current location is separate from the selected scenario.
 
-Assessment fields: `location`, `can_evacuate` (boolean or unknown), `people_count`, `wheelchair_users` (confirmed count, including zero when explicitly confirmed), `mobility_needs`, and `transport_needed`. Ask for the wheelchair-user count when wheelchair use is reported; do not infer it from party size. Preserve unknown values. Assistance requested, a capacity-compatible proposal, responder acceptance, and dispatch are separate facts. This demo implements requests and proposals, not dispatch.
+Assessment fields: `location`, `can_evacuate` (boolean or unknown), `people_count`, `wheelchair_users` (confirmed count, including zero when explicitly confirmed), `mobility_needs`, and `transport_needed`. Ask for the wheelchair-user count when wheelchair use is reported; do not infer it from party size. Preserve unknown values. The intake API records assistance requests and capacity-compatible proposals. The operator can separately assign a simulated crew in the dashboard and follow its radio acknowledgement and route.
 
 ## Event contract
 

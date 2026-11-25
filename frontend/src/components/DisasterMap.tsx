@@ -176,7 +176,7 @@ export function DisasterMap({
             <Legend color={SITUATION.unknown.color} label="Unconfirmed needs" />
             <Legend color={ENDED_CALL_COLOR} label="Ended / resolved" />
             <Legend color={SITUATION.trapped.color} label="Trapped" />
-            <Legend color={SITUATION.needs_help.color} label="Needs help" />
+            <Legend color={SITUATION.needs_help.color} label="Needs assistance" />
             <Legend color={SITUATION.can_leave.color} label="Can leave" />
           </>}
         </div>

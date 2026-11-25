@@ -46,6 +46,10 @@ export function voiceContext(event: ContextEvent, call: ContextCall): string | u
     if (selected?.zone_id !== call.instruction?.zone_id || selected?.version !== call.instruction?.version || selected?.text !== call.instruction?.text) return undefined;
   }
   if (event.type.startsWith('job.') && payload.revision !== call.revision) return undefined;
+  if (event.type === 'job.completed') {
+    return 'Background assessment for operator planning. Missing fields are for a later follow-up. '
+      + 'Address the caller’s current request first. ' + JSON.stringify(payload);
+  }
   if (event.type === 'instruction.updated') {
     const current = call.instruction;
     if (event.payload === null ? current != null : payload.zone_id !== current?.zone_id || payload.version !== current?.version) return undefined;

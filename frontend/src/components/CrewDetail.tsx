@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Accessibility, PhoneCall, Radio, Truck } from 'lucide-react'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from '@/components/ui/native-select'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { activeDispatch, etaMin, suggestCalls } from '@/lib/dispatch'
+import { activeDispatch, endedAssistanceLocations, etaMin, suggestCalls } from '@/lib/dispatch'
 import { cn } from '@/lib/utils'
 import type { Call, Dispatch, Facility, Responder, TranscriptLine } from '@/types'
 import { CREW_KIND, CREW_STATUS, SITUATION } from './labels'
@@ -29,7 +29,9 @@ export function CrewDetail({
 }) {
   const [destination, setDestination] = useState('')
   const destinations = facilities.filter((f) => f.position)
-  const chosen = destinations.find((f) => f.id === destination)
+  const reportedLocations = endedAssistanceLocations(crew, calls, dispatches)
+  const chosen = destinations.find((f) => `place:${f.id}` === destination)
+  const reported = reportedLocations.find((call) => `call:${call.id}` === destination)
   const d = activeDispatch(dispatches, crew.id)
   const last = d ?? [...dispatches].reverse().find((x) => x.crewId === crew.id)
   const options = suggestCalls(crew, calls, dispatches, now)
@@ -69,17 +71,25 @@ export function CrewDetail({
       {!d && (
         <div className="space-y-2 p-4">
           <div className="space-y-2 rounded-lg border p-3">
-            <label htmlFor="crew-destination" className="text-sm font-medium">Route to a point of interest</label>
+            <label htmlFor="crew-destination" className="text-sm font-medium">Route destination</label>
             <NativeSelect id="crew-destination" className="w-full" selectClassName="h-auto bg-background py-2 pl-2" value={destination} onChange={(event) => setDestination(event.target.value)}>
               <NativeSelectOption value="">Choose a destination…</NativeSelectOption>
-              {destinations.map((f) => <NativeSelectOption key={f.id} value={f.id}>{f.name}</NativeSelectOption>)}
+              {reportedLocations.length > 0 && <NativeSelectOptGroup label="Assistance reported on ended calls">
+                {reportedLocations.map((call) => <NativeSelectOption key={call.id} value={`call:${call.id}`}>{call.address} · {call.callerName}</NativeSelectOption>)}
+              </NativeSelectOptGroup>}
+              {destinations.length > 0 && <NativeSelectOptGroup label="Points of interest">
+                {destinations.map((f) => <NativeSelectOption key={f.id} value={`place:${f.id}`}>{f.name}</NativeSelectOption>)}
+              </NativeSelectOptGroup>}
             </NativeSelect>
-            {!destinations.length && <p className="text-xs text-muted-foreground">Find contacts with map locations to use as destinations.</p>}
-            <Button size="sm" disabled={!chosen} onClick={() => { if (chosen) onRoute(chosen) }}>Set simulated route</Button>
+            {reported && <p className="text-xs text-muted-foreground">Assistance reported · last confirmed caller location</p>}
+            {!destinations.length && !reportedLocations.length && <p className="text-xs text-muted-foreground">No mapped destinations available.</p>}
+            <Button size="sm" disabled={!chosen && !reported} onClick={() => { if (reported) onDispatch(reported); else if (chosen) onRoute(chosen) }}>
+              {reported ? 'Dispatch simulated crew' : 'Set simulated route'}
+            </Button>
             <p className="text-xs text-muted-foreground">Routes do not account for disaster conditions.</p>
           </div>
           <div className="text-xs font-medium text-muted-foreground">Simulate a rescue route</div>
-          {options.length === 0 && <p className="text-xs text-muted-foreground">No disabled or trapped callers waiting for a crew.</p>}
+          {options.length === 0 && <p className="text-xs text-muted-foreground">No active calls awaiting a crew.</p>}
           {options.slice(0, 4).map(({ call, km, fits }, i) => (
             <div key={call.id} className="rounded-lg border p-3">
               <div className="flex items-start justify-between gap-2">

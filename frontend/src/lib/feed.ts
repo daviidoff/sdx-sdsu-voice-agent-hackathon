@@ -33,14 +33,32 @@ export async function api<T>(path: string, body?: unknown, signal?: AbortSignal,
   return response.json() as Promise<T>
 }
 
+function needsAssistance(facts: { can_evacuate?: unknown; transport_needed?: unknown }) {
+  return facts.can_evacuate === false || facts.transport_needed === true
+}
+
+// Each assessment event contains the full set of saved facts. Keep the onset of
+// the current need across polling, corrections to other facts, and page reloads.
+function assistanceOnset(events: BackendEvent[]): number | undefined {
+  let since: number | undefined
+  for (const event of events) {
+    if (event.type !== 'assessment.updated' || !event.payload) continue
+    if (needsAssistance(event.payload)) since ??= Date.parse(event.created_at)
+    else since = undefined
+  }
+  return since
+}
+
 export function toCall(raw: BackendCall): Call {
   const a = raw.assessment
+  const help = needsAssistance(a)
   const location = a.location_resolution
   const mapped = !raw.pending_location && location?.status === 'resolved' && (!location.query || location.query === a.location) && Number.isFinite(location.lat) && Number.isFinite(location.lng) && Math.abs(location.lat!) <= 90 && Math.abs(location.lng!) <= 180
   const ended = raw.ended_at ?? raw.events.findLast((e) => e.type === 'call.ended')?.created_at
   return { id: raw.id, callerName: `${raw.mode === 'elevenlabs' ? 'Voice' : 'Simulation'} · ${raw.id.slice(0, 8)}`,
     phone: 'Browser call', address: raw.pending_location ? `Confirmation pending: ${raw.pending_location}` : a.location || 'Location not confirmed', locationQuery: a.location || undefined, position: mapped ? [location!.lat!, location!.lng!] : undefined,
-    people: a.people_count ?? null, situation: a.transport_needed === true || a.can_evacuate === false ? 'needs_help' : a.can_evacuate === true ? 'can_leave' : 'unknown',
+    people: a.people_count ?? null, situation: help ? 'needs_help' : a.can_evacuate === true ? 'can_leave' : 'unknown',
+    assistanceNeededAt: help ? assistanceOnset(raw.events) : undefined,
     mobility: a.mobility_needs || 'Mobility needs not confirmed', status: raw.status === 'ended' ? 'ended' : 'active',
     startedAt: Date.parse(raw.created_at), endedAt: ended ? Date.parse(ended) : undefined, transportNeeded: a.transport_needed ?? undefined, canEvacuate: a.can_evacuate ?? undefined, instruction: raw.instruction, mode: raw.mode,
     wheelchairUsers: a.wheelchair_users ?? undefined, scenarioId: raw.scenario_id, locationResolution: location, currentSpatialInstruction: raw.current_spatial_instruction }

@@ -44,6 +44,30 @@ test('only resolved valid coordinates get a map position', () => {
   }
 })
 
+test('a saved inability to leave starts one assistance ping without inferring transport', () => {
+  const event = (seconds, payload, type = 'assessment.updated') => ({
+    type, payload, created_at: new Date(seconds * 1000).toISOString(),
+  })
+  const raw = rawCall({ status: 'active', ended_at: undefined, assessment: {}, events: [] })
+  raw.events.push(event(1, { role: 'user', text: 'No, I need assistance.' }, 'transcript'))
+  assert.equal(toCall(raw).assistanceNeededAt, undefined)
+  raw.assessment = { can_evacuate: false }
+  raw.events.push(event(2, raw.assessment))
+  raw.events.push(event(3, { ...raw.assessment, people_count: 1 }))
+  const needsHelp = toCall(raw)
+  assert.equal(needsHelp.situation, 'needs_help')
+  assert.equal(needsHelp.transportNeeded, undefined)
+  assert.equal(needsHelp.assistanceNeededAt, 2000)
+  assert.equal(needsHelp.position, undefined)
+  raw.assessment = { can_evacuate: true }
+  raw.events.push(event(4, raw.assessment))
+  assert.equal(toCall(raw).assistanceNeededAt, undefined)
+  raw.assessment = { can_evacuate: true, transport_needed: true }
+  raw.events.push(event(5, raw.assessment))
+  assert.equal(toCall(raw).assistanceNeededAt, 5000)
+  assert.equal(toCall({ ...raw, events: [] }).assistanceNeededAt, undefined)
+})
+
 test('historical instruction and later map lookup remain distinct', () => {
   const instruction = { text: 'No instruction matched during this call.', version: null }
   const current_spatial_instruction = { text: 'Operator evacuation instruction', version: 3, zone_id: 'airport-zone' }

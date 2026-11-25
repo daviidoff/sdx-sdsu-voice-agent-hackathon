@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Emergency OS recording desk</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #112327; }
+  #desk {
+    position: absolute; width: 1600px; height: 900px; transform-origin: 0 0; overflow: hidden;
+    background: radial-gradient(ellipse at 12% 23%, #42666a 0%, transparent 48%),
+      radial-gradient(ellipse at 68% 111%, #294856 0%, transparent 68%), linear-gradient(132deg,#273e41,#101d24 73%);
+  }
+  iframe { display: block; border: 0; background: white; }
+  #operator {
+    position: absolute; left: 0; top: 0; width: 1280px; overflow: hidden; border-radius: 12px;
+    box-shadow: 0 25px 64px #020c1670, 0 0 0 1px #ffffff40; transform-origin: top left;
+    transition: transform 1.05s cubic-bezier(.25,.75,.22,1),border-radius .8s;
+    transform: translate(356px,89px) scale(.95);
+  }
+  #operator header {
+    position: relative; display: grid; place-items: center; height: 32px; background: #f4f5f5;
+    border-bottom: 1px solid #d7dcdc; color: #425256; font: 600 13px -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  #lights { display: flex; gap: 7px; position: absolute; left: 13px; top: 10px; }
+  #lights i { width: 11px; height: 11px; border-radius: 50%; background: #ed7269; }
+  #lights i:nth-child(2) { background: #eeb855; }
+  #lights i:nth-child(3) { background: #79ba82; }
+  #operator iframe { width: 1280px; height: 720px; }
+  #phone {
+    position: absolute; left: 26px; top: 50%; transform: translateY(-50%) scale(.86);
+    transform-origin: center left; overflow: hidden; border-radius: 40px;
+    box-shadow: 0 19px 48px #020c1655; transition: opacity .48s, transform .85s;
+  }
+  #phone iframe { position: absolute; width: 388px; height: 780px; }
+  #phone::before, #phone::after { content: ''; position: absolute; left: 50%; transform: translateX(-50%); z-index: 1; pointer-events: none; }
+  #phone::before { top: 14px; width: 62px; height: 12px; border-radius: 10px; background: #0b1718; }
+  #phone::after { bottom: 12px; width: 76px; height: 4px; border-radius: 5px; background: #b8cdca; }
+  #desk[data-shot="full"] #operator { transform: translate(0,-40px) scale(1.25); border-radius: 0; }
+  #desk[data-shot="call"] #operator { transform: translate(-513px,-159px) scale(1.667); border-radius: 0; }
+  #desk[data-shot="full"] #phone, #desk[data-shot="call"] #phone { opacity: 0; transform: translate(-225px,-50%) scale(.82); pointer-events: none; }
+  #pointer {
+    pointer-events: none; position: fixed; width: 26px; height: 34px; left: 0; top: 0; z-index: 5;
+    filter: drop-shadow(0 2px 2px #13222666); opacity: 0; transition: opacity .18s;
+  }
+  #pointer svg { width: 100%; height: 100%; }
+  #pointer.press::before { content: ''; position: absolute; inset: -12px auto auto -12px; width: 28px; height: 28px;
+    border: 2px solid #16776e; border-radius: 50%; animation: ring .32s ease-out both; }
+  @keyframes ring { to { transform: scale(1.55); opacity: 0; } }
+</style>
+<main id="desk" data-shot="wide">
+  <section id="phone" aria-label="Caller phone"><iframe title="Caller phone" name="caller" allow="microphone; autoplay" src="/"></iframe></section>
+  <section id="operator" aria-label="Operator window"><header><span id="lights" aria-hidden="true"><i></i><i></i><i></i></span>Emergency OS · Operator</header>
+    <iframe title="Operator dashboard" name="operator" src="/dashboard/?view=calls"></iframe>
+  </section>
+</main>
+<div id="pointer" aria-hidden="true"><svg viewBox="0 0 26 34"><path d="M2 2L22 19L13.3 19.2L17.8 28.7L13.2 30.9L8.8 21.1L2 27Z" fill="#182022" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg></div>
+<script>
+  const desk = document.querySelector('#desk'), phone = document.querySelector('#phone'), pointer = document.querySelector('#pointer');
+  const size = () => { desk.style.transform = 'scale(' + innerWidth / 1600 + ')'; };
+  size(); addEventListener('resize', size);
+  window.framePhone = () => {
+    const frame = phone.querySelector('iframe'), doc = frame.contentDocument;
+    Object.assign(doc.querySelector('.screen').style, { minHeight: '584px', paddingTop: '56px', paddingBottom: '36px' });
+    const box = doc.querySelector('.iphone').getBoundingClientRect();
+    Object.assign(frame.style, {left: -box.x+'px', top: -box.y+'px'});
+    Object.assign(phone.style, {width: box.width+'px', height: box.height+'px'});
+  };
+  window.shot = name => { desk.dataset.shot = name; };
+  let hide;
+  window.point = ([x,y,pressed]) => {
+    pointer.style.transform = 'translate('+x+'px,'+y+'px)'; pointer.style.opacity = '1';
+    pointer.classList.toggle('press', !!pressed); clearTimeout(hide);
+    hide = setTimeout(() => { pointer.style.opacity='0'; pointer.classList.remove('press'); }, 1050);
+  };
+</script>
+</html>

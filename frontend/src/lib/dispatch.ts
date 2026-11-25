@@ -70,6 +70,14 @@ export function crewPosition(r: Responder, dispatches: Dispatch[], now: number):
 export const needsWheelchair = (call: Call) => /wheelchair/i.test(call.mobility)
 export const needsRescue = (call: Call) => call.status !== 'resolved' && call.status !== 'ended' && (call.situation === 'needs_help' || call.situation === 'trapped')
 
+/** An operator can choose the last mapped location of a call that ended with an outstanding need. */
+export function endedAssistanceLocations(crew: Responder, calls: Call[], dispatches: Dispatch[]): Call[] {
+  const covered = new Set(dispatches.filter((d) => d.status !== 'done' && d.target.kind === 'call').map((d) => d.target.id))
+  return calls.filter((c) => c.status === 'ended' && c.position && !covered.has(c.id)
+    && (c.situation === 'needs_help' || c.situation === 'trapped') && (!needsWheelchair(c) || crew.wheelchair))
+    .sort((a, b) => (b.endedAt ?? b.startedAt) - (a.endedAt ?? a.startedAt))
+}
+
 /** Crews for a caller: available first, then ones that fit (wheelchair), then nearest. Code decides, not the model. */
 export function suggestCrews(call: Call, responders: Responder[], dispatches: Dispatch[], now: number) {
   return responders

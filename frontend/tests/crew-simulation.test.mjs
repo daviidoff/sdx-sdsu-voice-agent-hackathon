@@ -1,7 +1,20 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { advanceSimulation, relocateCrew, spawnCrews } from '../src/lib/crew-simulation.ts'
-import { crewPosition, distanceKm, fetchRoute } from '../src/lib/dispatch.ts'
+import { crewPosition, distanceKm, endedAssistanceLocations, fetchRoute, suggestCalls } from '../src/lib/dispatch.ts'
+
+test('an operator can route to an ended assistance call without treating it as a live call', () => {
+  const medic = spawnCrews([32.71, -117.15], 0).responders.find((r) => r.kind === 'ambulance')
+  const report = { id: 'library', status: 'ended', situation: 'needs_help', position: [32.7089, -117.1541],
+    mobility: '', endedAt: 8000, startedAt: 1000 }
+  const calls = [report, {...report, id: 'older', endedAt: 7000}, {...report, id: 'wheelchair', mobility: 'Wheelchair lift'},
+    {...report, id: 'cleared', situation: 'can_leave'}, {...report, id: 'unmapped', position: undefined},
+    {...report, id: 'resolved', status: 'resolved'}, {...report, id: 'on-call', status: 'active'}]
+  assert.deepEqual(endedAssistanceLocations(medic, calls, []).map((c) => c.id), ['library', 'older'])
+  assert.deepEqual(suggestCalls(medic, calls, [], 9000).map((item) => item.call.id), ['on-call'])
+  const assigned = {status: 'en_route', target: {kind: 'call', id: 'library'}}
+  assert.deepEqual(endedAssistanceLocations(medic, calls, [assigned]).map((c) => c.id), ['older'])
+})
 
 test('four distinct simulated crews patrol slowly near the chosen map center', () => {
   const now = 10000

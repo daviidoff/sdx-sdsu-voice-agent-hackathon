@@ -48,6 +48,7 @@ export interface Call {
   endedAt?: number
   transportNeeded?: boolean
   canEvacuate?: boolean
+  assistanceNeededAt?: number
   instruction?: { zone_id?: string; text?: string; version?: number; source?: string }
   currentSpatialInstruction?: { zone_id?: string; text?: string; version?: number; source?: string }
   locationResolution?: LocationResolution

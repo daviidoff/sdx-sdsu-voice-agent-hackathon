@@ -35,15 +35,23 @@ const facilityIcon = (f: Facility, selected: boolean) => {
   return iconCache.get(key)!
 }
 
-const callerIcon = (color: string, selected: boolean, sharedLocation: boolean) => {
-  const key = `caller|${color}|${selected}|${sharedLocation}`
+type AssistanceLabel = '' | 'Needs assistance' | 'Assistance reported'
+
+function assistanceBadge(label: string) {
+  if (!label) return ''
+  const style = label === 'Assistance reported' ? 'map-assistance-label is-historical' : 'map-assistance-label'
+  return `<span class="${style}">${escapeHtml(label)}</span>`
+}
+
+const callerIcon = (color: string, selected: boolean, sharedLocation: boolean, assistance: AssistanceLabel, ping: boolean) => {
+  const key = `caller|${color}|${selected}|${sharedLocation}|${assistance}|${ping}`
   if (!iconCache.has(key)) iconCache.set(key, L.divIcon({
-    className: `response-marker caller-marker${selected ? ' caller-marker-selected' : ''}${sharedLocation ? ' caller-marker-shared' : ''}`,
+    className: `response-marker caller-marker${selected ? ' caller-marker-selected' : ''}${sharedLocation ? ' caller-marker-shared' : ''}${ping ? ' assistance-ping' : ''}`,
     iconSize: [32, 32],
     // Keep the underlying coordinate while making room for both click targets.
     iconAnchor: sharedLocation ? [-18, 16] : [16, 16],
     tooltipAnchor: sharedLocation ? [34, 0] : [0, 0],
-    html: `<span class="map-symbol ${selected ? 'is-selected' : ''}" style="--symbol-color:${color}">${symbolMarkup(callerSymbol)}</span>`,
+    html: `<span class="map-symbol ${selected ? 'is-selected' : ''}" style="--symbol-color:${color}">${symbolMarkup(callerSymbol)}</span>${assistanceBadge(assistance)}`,
   }))
   return iconCache.get(key)!
 }
@@ -54,6 +62,7 @@ type Pin = {
   position: LatLng
   name: string
   urgent?: string
+  ping?: boolean
   element: ReactElement
 }
 
@@ -70,6 +79,8 @@ export function ResponseMarkers({ calls, facilities, responders, dispatches, now
   const [draggingCrew, setDraggingCrew] = useState<string>()
   const facilityPositions = useMemo(() => new Set(facilities.flatMap((f) => f.position ? [f.position.join(',')] : [])), [facilities])
   const isSelected = (kind: Pin['kind'], id: string) => selection?.kind === kind && selection.id === id
+  const destination = selection?.kind === 'crew' ? activeDispatch(dispatches, selection.id)?.target : undefined
+  const isDestination = (kind: Pin['kind'], id: string) => destination?.kind === kind && destination.id === id
   const pins: Pin[] = []
 
   for (const f of facilities) {
@@ -93,12 +104,16 @@ export function ResponseMarkers({ calls, facilities, responders, dispatches, now
     const selected = isSelected('call', c.id)
     const sharedLocation = facilityPositions.has(c.position.join(','))
     const closed = c.status === 'resolved' || c.status === 'ended'
-    const label = `${c.callerName} · ${c.address} · ${closed ? 'Call ended' : situationLabel(c)}`
+    const activeNeed = needsRescue(c)
+    const historicalNeed = c.status === 'ended' && (c.situation === 'needs_help' || c.situation === 'trapped')
+    const ping = (activeNeed || historicalNeed) && c.assistanceNeededAt !== undefined && now >= c.assistanceNeededAt && now - c.assistanceNeededAt < 5000
+    const assistance = activeNeed ? 'Needs assistance' : historicalNeed && (selected || ping || isDestination('call', c.id)) ? 'Assistance reported' : ''
+    const label = `${c.callerName} · ${c.address} · ${closed ? 'Call ended' : situationLabel(c)}${historicalNeed ? ' · Assistance reported' : ''}`
     pins.push({
-      kind: 'call', id: c.id, position: c.position, name: c.callerName, urgent: needsRescue(c) ? situationLabel(c) : undefined,
+      kind: 'call', id: c.id, position: c.position, name: c.callerName, urgent: activeNeed ? situationLabel(c) : undefined, ping,
       element: <Marker interactive={!drawing} keyboard={!drawing} position={c.position}
-        icon={callerIcon(closed ? ENDED_CALL_COLOR : SITUATION[c.situation].color, selected, sharedLocation)}
-        title={c.callerName} zIndexOffset={selected ? 750 : 250}
+        icon={callerIcon(closed ? ENDED_CALL_COLOR : SITUATION[c.situation].color, selected, sharedLocation, assistance, ping)}
+        title={c.callerName} zIndexOffset={selected ? 750 : activeNeed ? 550 : 250}
         eventHandlers={{ click: () => !drawing && onSelect({ kind: 'call', id: c.id }) }}>
         <Tooltip direction="top" offset={[0, -12]}>{label}<br />Approximate {c.locationResolution?.precision === 'intersection' ? 'intersection' : 'place reference'}</Tooltip>
       </Marker>,
@@ -120,7 +135,7 @@ export function ResponseMarkers({ calls, facilities, responders, dispatches, now
 
   const singles: Pin[] = []
   const eligible = pins.filter((pin) => {
-    if (isSelected(pin.kind, pin.id) || (pin.kind === 'crew' && draggingCrew === pin.id)) {
+    if (isSelected(pin.kind, pin.id) || isDestination(pin.kind, pin.id) || (pin.kind === 'crew' && draggingCrew === pin.id)) {
       singles.push(pin)
       return false
     }
@@ -156,12 +171,14 @@ function PinGroup({ anchor, pins, zoom, drawing, map, onSelect }: {
   const action = canZoom ? 'Zoom in' : 'Show map items'
   const urgentLabel = urgent ? ` · ${urgent} urgent` : ''
   const count = pins.length
+  const ping = pins.some((pin) => pin.ping)
+  const assistanceLabel = urgent ? `${urgent} ${urgent === 1 ? 'needs' : 'need'} assistance` : ping ? 'Assistance reported' : ''
   const icon = useMemo(() => L.divIcon({
-    className: 'response-cluster',
+    className: ping ? 'response-cluster assistance-ping' : 'response-cluster',
     iconSize: [38, 38],
     iconAnchor: [19, 19],
-    html: `<span class="sr-only">${action}: ${summary}${urgentLabel}</span><span aria-hidden="true" class="response-cluster-count${urgent ? ' response-cluster-urgent' : ''}">${count}</span>`,
-  }), [action, summary, urgent, urgentLabel, count])
+    html: `<span class="sr-only">${action}: ${summary}${urgentLabel}</span><span aria-hidden="true" class="response-cluster-count${urgent ? ' response-cluster-urgent' : ''}">${count}</span>${assistanceBadge(assistanceLabel)}`,
+  }), [action, summary, urgent, urgentLabel, count, ping, assistanceLabel])
   const expand = () => {
     const targetZoom = Math.max(zoom + 1, Math.min(zoom + 3, map.getBoundsZoom(bounds, false, L.point(96, 96))))
     map.flyTo(bounds.getCenter(), Math.min(maxZoom, targetZoom), { duration: 0.4 })

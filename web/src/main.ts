@@ -161,9 +161,22 @@ async function startCall() {
           confirm_location: async (parameters: Record<string,unknown>) => {
             await transcriptQueue;
             if(!operatorTurns.canRecordCallerFacts()&&parameters.location!==call?.assessment.location)return JSON.stringify({error:'Operator instructions are not a caller location confirmation. Ask the caller before changing location.'});
-            return JSON.stringify(await api(`/api/calls/${boundCallId}/resolve`, {location:parameters.location}));
+            const instruction = await api<Instruction>(`/api/calls/${boundCallId}/resolve`, {location: parameters.location});
+            const followup = instruction.action === 'evacuate' && call?.assessment.can_evacuate == null
+              ? 'Relay the published instruction first. If the caller has no more urgent concern and has not said whether they can leave, ask only whether they can leave on their own. Wait for their answer before asking about transport or headcount.'
+              : undefined;
+            return JSON.stringify({...instruction, followup});
           },
-          update_assessment: async (parameters: Record<string,unknown>) => operatorTurns.canRecordCallerFacts()?JSON.stringify(compactToolResult(await api<Call>(`/api/calls/${boundCallId}/assessment`, parameters))):JSON.stringify({error:'No new caller-confirmed facts. Relay the operator message; do not record it as caller evidence.'}),
+          update_assessment: async (parameters: Record<string,unknown>) => {
+            if (!operatorTurns.canRecordCallerFacts()) {
+              return JSON.stringify({error: 'No new caller-confirmed facts. Relay the operator message; do not record it as caller evidence.'});
+            }
+            const result = compactToolResult(await api<Call>(`/api/calls/${boundCallId}/assessment`, parameters));
+            const followup = parameters.can_evacuate === false && result.assessment.transport_needed == null
+              ? 'If the caller asked for assistance and the kind of help is still unknown, call message_operator with their request now. Wait for its receipt, then ask what help they need if they can continue. Leave transport unknown.'
+              : undefined;
+            return JSON.stringify({...result, followup});
+          },
           request_assistance: async (parameters: Record<string,unknown>) => operatorTurns.canRecordCallerFacts()?JSON.stringify(compactToolResult(await api<Call>(`/api/calls/${boundCallId}/assessment`, {...parameters,transport_needed:true}))):JSON.stringify({error:'An operator message is not a new caller transport request.'}),
         },
       };
