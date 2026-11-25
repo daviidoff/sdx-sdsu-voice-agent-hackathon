@@ -1,0 +1,8 @@
+[
+  {"id": "wheelchair-van-3", "name": "Wheelchair Van 3", "kind": "wheelchair_van", "passenger_capacity": 4, "wheelchair_capacity": 2, "lat": 32.7612, "lng": -117.1468, "base": "Station 45 (simulated)", "simulated": true},
+  {"id": "wheelchair-van-5", "name": "Wheelchair Van 5", "kind": "wheelchair_van", "passenger_capacity": 4, "wheelchair_capacity": 2, "lat": 32.7745, "lng": -117.1302, "base": "Station 18 (simulated)", "simulated": true},
+  {"id": "paratransit-bus-2", "name": "Paratransit Bus 2", "kind": "bus", "passenger_capacity": 10, "wheelchair_capacity": 4, "lat": 32.7558, "lng": -117.1617, "base": "MTS Access depot (simulated)", "simulated": true},
+  {"id": "engine-14", "name": "Engine 14", "kind": "engine", "passenger_capacity": 4, "wheelchair_capacity": 0, "lat": 32.7671, "lng": -117.1556, "base": "Station 14 (simulated)", "simulated": true},
+  {"id": "engine-22", "name": "Engine 22", "kind": "engine", "passenger_capacity": 4, "wheelchair_capacity": 0, "lat": 32.7802, "lng": -117.1704, "base": "Station 22 (simulated)", "simulated": true},
+  {"id": "medic-7", "name": "Medic 7", "kind": "ambulance", "passenger_capacity": 1, "wheelchair_capacity": 0, "lat": 32.7704, "lng": -117.1389, "base": "Station 7 (simulated)", "simulated": true}
+]
